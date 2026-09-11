@@ -11,6 +11,7 @@ from typing import Any
 logger = logging.getLogger("analysis_runner")
 
 from app.core.exceptions import ProductTypeGateError
+from app.core.runtime_contract import EXPECTED_COMBINATION_MODEL_VERSION
 from app.domain.dto import ProductDTO
 from app.domain.interfaces import BrowserManager, LLMClient
 from app.domain.product_url import extract_product_id
@@ -19,6 +20,7 @@ from app.infrastructure.storage.excel_exporter import (
     export_hypothesis_to_excel,
     export_judgment_to_excel,
 )
+from app.services.bundle_plan_service import BundlePlanService, unavailable_block
 from app.services.complement_evidence_service import ComplementEvidenceService
 from app.services.hypothesis_service import HypothesisService
 from app.services.judgment_service import JudgmentService
@@ -30,7 +32,9 @@ from app.services.product_type_reviewer import (
     ReviewStatus,
 )
 from backend.application.result_quality import (
+    ResultQualityError,
     summarize_directions,
+    validate_bundle_plan_payload,
     validate_hypothesis_payload,
 )
 
@@ -87,6 +91,7 @@ class AnalysisRunner:
         product_service_factory: Callable[[BrowserManager], Any] | None = None,
         product: ProductDTO | None = None,
         browser_started: bool = False,
+        include_bundle_plans: bool = True,
     ) -> RunnerResult:
         factory = product_service_factory or ProductService
         if not browser_started:
@@ -156,6 +161,20 @@ class AnalysisRunner:
             validate_hypothesis_payload(
                 payload, expected_model_version=expected_model_version
             )
+            if include_bundle_plans:
+                # Attached outside _serialize_hypothesis, and only at the top
+                # level: the stage runs once on the primary provider, so a dual
+                # model result keeps a single copy rather than one per model.
+                bundle_plans = await _build_bundle_plan_block(
+                    llm,
+                    product,
+                    result.directions,
+                    product_profile=result.product_profile,
+                    expected_model_version=expected_model_version,
+                    provider_context=hypothesis_context,
+                )
+                if bundle_plans:
+                    _attach_bundle_plan_block(payload, bundle_plans)
             artifacts = []
 
             json_path = self._store.save_hypothesis(result)
@@ -304,6 +323,9 @@ class AnalysisRunner:
                 report_progress,
                 single_progress=90,
             )
+            _validate_judgment_coverage(result, products_b)
+            if result2 is not None:
+                _validate_judgment_coverage(result2, products_b)
 
             payload = _serialize_judgment(
                 result, product_a=product_a, products_b=products_b
@@ -378,6 +400,7 @@ class AnalysisRunner:
         product_service_factory: Callable[[BrowserManager], Any] | None = None,
         products: list[ProductDTO] | None = None,
         browser_started: bool = False,
+        include_bundle_plans: bool = True,
     ) -> RunnerResult:
         factory = product_service_factory or ProductService
         if not browser_started:
@@ -464,6 +487,19 @@ class AnalysisRunner:
                 validate_hypothesis_payload(
                     payload, expected_model_version=expected_model_version
                 )
+                if include_bundle_plans:
+                    bundle_plans = await _build_bundle_plan_block(
+                        llm,
+                        product,
+                        result.directions,
+                        product_profile=result.product_profile,
+                        expected_model_version=expected_model_version,
+                        provider_context="/".join(
+                            value for value in (provider, provider_model) if value
+                        ),
+                    )
+                    if bundle_plans:
+                        _attach_bundle_plan_block(payload, bundle_plans)
                 json_path = self._store.save_hypothesis(result)
                 excel_name = json_path.stem + ".xlsx"
                 excel_path = self._excel_dir / excel_name
@@ -711,6 +747,8 @@ VETO_CHECK_LABELS = {
     "g5_logistics": "物流问题",
     "g6_legal": "法律风险",
     "g7_bad_reviews": "差评超标",
+    "gate_status": "关卡状态",
+    "needs_verification": "待核验项",
     "vetoed": "被否决",
     "veto_reason": "否决原因",
 }
@@ -798,6 +836,101 @@ def _fmt(d: Any) -> str:
     if isinstance(d, list):
         return "\n".join(f"  - {_fmt(item)}" for item in d)
     return str(d)
+
+
+_JUDGMENT_PER_B_FIELDS = (
+    "motivation_review",
+    "price_calculation",
+    "veto_check",
+    "c_score",
+    "b_score",
+    "user_rationality",
+    "delivery_package",
+)
+
+
+def _judgment_covered_products(result: Any) -> set[str]:
+    """Distinct B products the judgment model actually addressed."""
+    covered: set[str] = set()
+
+    def add(value: Any) -> None:
+        if isinstance(value, str):
+            normalized = "".join(char.casefold() for char in value if char.isalnum())
+            if normalized:
+                covered.add(normalized)
+
+    alignment_review = getattr(result, "alignment_review", None)
+    if isinstance(alignment_review, list):
+        for entry in alignment_review:
+            if isinstance(entry, dict):
+                add(entry.get("product_b"))
+
+    for section_name in _JUDGMENT_PER_B_FIELDS:
+        section = getattr(result, section_name, None)
+        per_b_product = section.get("per_b_product") if isinstance(section, dict) else None
+        if isinstance(per_b_product, dict):
+            for name in per_b_product:
+                add(name)
+
+    return covered
+
+
+def _validate_judgment_coverage(result: Any, products_b: list[ProductDTO]) -> None:
+    """Require the judgment to address every submitted B product.
+
+    A real run judged one of two B products and, because the omitted one was
+    the competitor that would have sunk the bundle, reported a *better* grade.
+    A silent omission is therefore treated as a quality failure, not as a
+    slightly thinner report: the job fails and model rotation can retry.
+    """
+    expected = len(products_b)
+    covered = _judgment_covered_products(result)
+    if len(covered) < expected:
+        raise ResultQualityError(
+            "judgment covered "
+            f"{len(covered)} of {expected} submitted B products"
+        )
+
+
+async def _build_bundle_plan_block(
+    llm: LLMClient,
+    product: ProductDTO,
+    directions: list[Any],
+    *,
+    product_profile: dict[str, Any] | None,
+    expected_model_version: str | None,
+    provider_context: str,
+) -> dict[str, Any]:
+    """Build the instruction C block, or ``{}`` when the stage is gated off.
+
+    Gated on the v2.1 contract because the stage consumes v2.1 server-scored
+    directions; a legacy run must not pay for an extra model call. The service
+    itself is total, so this cannot fail the surrounding job.
+    """
+    if expected_model_version != EXPECTED_COMBINATION_MODEL_VERSION:
+        return {}
+    block = await BundlePlanService(llm, provider_context=provider_context).build(
+        product, directions, product_profile=product_profile
+    )
+    return block or {}
+
+
+def _attach_bundle_plan_block(payload: dict[str, Any], block: dict[str, Any]) -> None:
+    """Attach the block, degrading to an unavailable envelope if it fails.
+
+    The bundle stage is optional enrichment: a defect in it must never fail an
+    otherwise valid hypothesis report. A block that cannot pass the server gate
+    is replaced by a self-describing unavailable envelope rather than dropped,
+    so the failure stays visible in the stored result.
+    """
+    payload["bundle_plans"] = block
+    try:
+        validate_bundle_plan_payload(payload)
+    except ResultQualityError as error:
+        logger.error("Bundle plan block failed validation: %s", error.message)
+        payload["bundle_plans"] = unavailable_block(
+            f"组合方案校验未通过：{error.message}"
+        )
 
 
 def _serialize_hypothesis(result: Any) -> dict[str, Any]:

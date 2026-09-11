@@ -32,6 +32,25 @@ BLOCKED_GATE_CONTRACT = {
 FOOD_REJECTION_CODES = {"food_product", "ingestible_product", "confirmed_food"}
 UNCERTAIN_REVIEW_STATUSES = {"likely_non_food", "needs_review"}
 
+BUNDLE_STAGE_VERSION = "bundle_stage_v1"
+BUNDLE_PLAN_MAX = 3
+BUNDLE_RANKED_RANKS = ("first", "second", "third")
+BUNDLE_VALID_VERDICTS = {"plans_ready", "no_viable_bundle", "insufficient_evidence"}
+BUNDLE_REQUIRED_COUNTERFACTUALS = ("main_only", "own_existing_supplies")
+#: Keys the model must never author. The bundle stage reasons about complete
+#: configurations; every number stays with the server, which already scored
+#: the directions this stage builds from.
+BUNDLE_FORBIDDEN_SCORE_KEYS = frozenset(
+    {
+        "final_score",
+        "score_cap",
+        "recommendation",
+        "stickiness_score",
+        "estimated_score",
+        "evidence_level",
+    }
+)
+
 
 class ResultQualityError(RuntimeError):
     code = "RESULT_QUALITY_INVALID"
@@ -320,6 +339,170 @@ def _validate_single_payload(
         if payload.get("audit_outcome") != "recovered_candidates":
             _fail("Recovered result requires a recovered audit outcome")
 
+    # Stored legacy payloads never carry this key, so their behaviour is
+    # unchanged; only results produced by the bundle stage are checked.
+    if "bundle_plans" in payload:
+        _validate_bundle_plan_block(payload)
+
+
+def _is_non_empty_str(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _normalize_direction_name(value: str) -> str:
+    return "".join(char.casefold() for char in value if char.isalnum())
+
+
+def _iter_nested_keys(node: Any):
+    if isinstance(node, dict):
+        for key, value in node.items():
+            yield key
+            yield from _iter_nested_keys(value)
+    elif isinstance(node, list):
+        for item in node:
+            yield from _iter_nested_keys(item)
+
+
+def _scored_direction_names(payload: dict[str, Any]) -> set[str]:
+    directions = payload.get("structured_directions")
+    if not isinstance(directions, list):
+        return set()
+    return {
+        _normalize_direction_name(item["canonical_name"])
+        for item in directions
+        if isinstance(item, dict) and _is_non_empty_str(item.get("canonical_name"))
+    }
+
+
+def _validate_bundle_counterfactuals(plan: dict[str, Any]) -> set[str]:
+    counterfactuals = plan.get("counterfactuals")
+    if not isinstance(counterfactuals, list):
+        _fail("Bundle plan counterfactuals must be a list")
+    alternatives: list[str] = []
+    for item in counterfactuals:
+        if not isinstance(item, dict) or not _is_non_empty_str(item.get("alternative")):
+            _fail("Bundle plan counterfactual requires an alternative")
+        alternatives.append(item["alternative"])
+    if len(set(alternatives)) != len(alternatives):
+        _fail("Bundle plan counterfactuals must be unique")
+    return set(alternatives)
+
+
+def _validate_bundle_plan(
+    plan: Any,
+    valid_names: set[str],
+    *,
+    expected_rank: str | None = None,
+) -> str:
+    if not isinstance(plan, dict):
+        _fail("Bundle plan entry must be an object")
+    rank = plan.get("rank")
+    if expected_rank is not None and rank != expected_rank:
+        _fail(f"Bundle plan rank must be {expected_rank}")
+
+    members = plan.get("members")
+    if not isinstance(members, list) or not members:
+        _fail("Bundle plan must contain at least one member")
+    for member in members:
+        if not isinstance(member, dict) or not _is_non_empty_str(
+            member.get("canonical_name")
+        ):
+            _fail("Bundle plan member requires a canonical_name")
+        if _normalize_direction_name(member["canonical_name"]) not in valid_names:
+            _fail("Bundle plan member is not one of the scored directions")
+
+    bundle_size = plan.get("bundle_size")
+    if (
+        isinstance(bundle_size, bool)
+        or not isinstance(bundle_size, int)
+        or not 1 <= bundle_size <= 3
+        or bundle_size != len(members)
+    ):
+        _fail("Bundle plan bundle_size must match its member count")
+
+    used_names = plan.get("used_direction_names")
+    if not isinstance(used_names, list) or not all(
+        _is_non_empty_str(name) for name in used_names
+    ):
+        _fail("Bundle plan used_direction_names must be a list of strings")
+    if any(
+        _normalize_direction_name(name) not in valid_names for name in used_names
+    ):
+        _fail("Bundle plan references a direction that is not in the payload")
+
+    increment_tests = plan.get("increment_tests")
+    if not isinstance(increment_tests, list) or len(increment_tests) != len(members):
+        _fail("Bundle plan must carry one add/remove test per member")
+
+    alternatives = _validate_bundle_counterfactuals(plan)
+    for required in BUNDLE_REQUIRED_COUNTERFACTUALS:
+        if required not in alternatives:
+            _fail(f"Bundle plan is missing the {required} comparison")
+    return str(rank)
+
+
+def _validate_bundle_plan_block(payload: dict[str, Any]) -> None:
+    block = payload.get("bundle_plans")
+    if not isinstance(block, dict):
+        _fail("bundle_plans block must be an object")
+    if block.get("stage_version") != BUNDLE_STAGE_VERSION:
+        _fail("bundle_plans block has an unknown stage version")
+    forbidden = sorted(
+        key for key in _iter_nested_keys(block) if key in BUNDLE_FORBIDDEN_SCORE_KEYS
+    )
+    if forbidden:
+        _fail(
+            "bundle_plans block must not carry server-owned fields: "
+            + ", ".join(forbidden)
+        )
+
+    result_status = block.get("result_status")
+    if result_status not in {"completed", "unavailable"}:
+        _fail("bundle_plans block has an unknown result status")
+    plans = block.get("plans")
+    exploratory_plans = block.get("exploratory_plans")
+    if not isinstance(plans, list) or not isinstance(exploratory_plans, list):
+        _fail("bundle_plans plans must be lists")
+
+    if result_status == "unavailable":
+        if plans or exploratory_plans:
+            _fail("An unavailable bundle stage cannot carry plans")
+        if block.get("verdict") != "insufficient_evidence":
+            _fail("An unavailable bundle stage must report insufficient evidence")
+        if not _is_non_empty_str(block.get("unavailable_reason")):
+            _fail("An unavailable bundle stage requires a reason")
+        return
+
+    verdict = block.get("verdict")
+    if verdict not in BUNDLE_VALID_VERDICTS:
+        _fail("bundle_plans block has an unknown verdict")
+    if len(plans) > BUNDLE_PLAN_MAX or len(exploratory_plans) > BUNDLE_PLAN_MAX:
+        _fail("bundle_plans block carries too many plans")
+    if bool(plans) != (verdict == "plans_ready"):
+        _fail("bundle_plans verdict does not match its plans")
+    if not plans and not _is_non_empty_str(block.get("verdict_statement")):
+        _fail("An empty bundle stage requires a verdict statement")
+
+    valid_names = _scored_direction_names(payload)
+    ranks = [
+        _validate_bundle_plan(plan, valid_names, expected_rank=None) for plan in plans
+    ]
+    if len(set(ranks)) != len(ranks):
+        _fail("Bundle plan ranks must be unique")
+    if any(rank not in BUNDLE_RANKED_RANKS for rank in ranks):
+        _fail("Ranked bundle plans must use first/second/third")
+    for plan in exploratory_plans:
+        _validate_bundle_plan(plan, valid_names, expected_rank="exploratory")
+
+
+def validate_bundle_plan_payload(payload: Any) -> None:
+    """Validate the bundle plan block on an otherwise valid hypothesis payload."""
+    if not isinstance(payload, dict):
+        _fail("Hypothesis result payload must be an object")
+    if "bundle_plans" not in payload:
+        _fail("bundle_plans block is missing from the result payload")
+    _validate_bundle_plan_block(payload)
+
 
 def validate_hypothesis_payload(
     payload: Any, *, expected_model_version: str | None
@@ -358,6 +541,8 @@ def validate_batch_payload(
 
 
 __all__ = [
+    "BUNDLE_REQUIRED_COUNTERFACTUALS",
+    "BUNDLE_STAGE_VERSION",
     "RESULT_NEEDS_EVIDENCE",
     "RESULT_NO_CANDIDATES",
     "RESULT_WITH_CANDIDATES",
@@ -365,5 +550,6 @@ __all__ = [
     "ResultSummary",
     "summarize_directions",
     "validate_batch_payload",
+    "validate_bundle_plan_payload",
     "validate_hypothesis_payload",
 ]

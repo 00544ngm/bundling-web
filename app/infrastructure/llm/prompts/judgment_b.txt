@@ -28,13 +28,30 @@ B品数据：{product_b_data}
    为每个B品输出用户理性评分（0-100）和分析文字。
 
 4. 一票否决（Veto Check）
-   G1: A品是耗材类/B品是耐用品 或反之 → 节奏不匹配
-   G2: B是A的竞品（功能重叠、同一场景替代关系）
-   G3: B的评论有大量A品互补需求（已被验证）
-   G4: B的品牌力显著高于A（喧宾夺主）
-   G5: B的体积/重量导致物流成本不成比例
-   G6: B有法律风险（侵权/认证/合规）
-   G7: B的差评率>20%或核心功能差评集中
+
+   【判定口径 V2.1：信息不足 → 待核验；只有已确认阻断才否决】
+   下列 g1-g7 布尔值表示"已确认阻断"，不表示"存在该项风险"。
+   只有存在可核验的确认阻断事实才可置 true；仅有疑点、仅有非空理由文本、或事实不足时一律置 false，
+   并把需要核验的内容写入 needs_verification。
+   不得因为 reason 文本非空就判定 blocked。
+   信息不足只能使用 needs_verification，并把需要核验的内容写入 missing_evidence；一般风险提示不能当作硬拒绝。
+
+   一致性契约：
+   若任一 gN 为 true，vetoed 必须为 true，且 veto_reason 必须写明触发关卡与确认事实；
+   若全部 gN 为 false，vetoed 必须为 false，且 veto_reason 必须为空字符串。
+
+   每项另给 gate_status，取 clear / needs_verification / blocked 之一：
+   clear 表示已确认不存在该阻断；needs_verification 表示信息不足待核验且不否决；blocked 表示已确认阻断。
+
+   G1 节奏不匹配：A品是耗材类/B品是耐用品或反之。
+      默认 needs_verification；仅当确认存在耐用/耗材错配、且该B品没有补充或复购路径时才 blocked。
+   G2 竞品冲突：B是A的竞品（功能重叠、同一场景替代关系）。确认功能重叠才 blocked。
+   G3 商业机会减弱：B的评论已大量反映A品互补需求，说明该搭配已被现成方案满足。
+      这是商业机会信号，只用于降低推荐排序，永不硬否决；g3_validated 恒为 false。
+   G4 品牌压制：B的品牌力显著高于A（喧宾夺主）。需有可比品牌力依据才 blocked。
+   G5 物流问题：B的体积/重量导致物流成本不成比例。本轮不考虑运费，默认 needs_verification。
+   G6 法律风险：B有法律风险（侵权/认证/合规）。需指明具体风险与依据才 blocked。
+   G7 差评超标：B的差评率>20%或核心功能差评集中。需有实际测得的差评率才 blocked。
 
 5. 双评分（C-Score + B-Score）
    C组合价值分(0-100)：按互补强度、客单价提升、场景增值、差评覆盖打分
@@ -95,6 +112,8 @@ B品数据：{product_b_data}
         "g5_logistics": false,
         "g6_legal": false,
         "g7_bad_reviews": false,
+        "gate_status": "clear | needs_verification | blocked",
+        "needs_verification": [],
         "vetoed": false,
         "veto_reason": ""
       }

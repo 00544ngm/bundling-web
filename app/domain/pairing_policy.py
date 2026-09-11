@@ -36,6 +36,10 @@ class DecisionAction(StrEnum):
     NOT_RECOMMENDED = "not_recommended"
     OBSERVE = "observe"
     NEEDS_EVIDENCE = "needs_evidence"
+    #: Same "not yet verified" state as NEEDS_EVIDENCE, but the candidate scored
+    #: high enough to be worth verifying first. Without this tier every held
+    #: candidate collapsed onto one action, throwing away a 24-point spread.
+    NEEDS_EVIDENCE_PRIORITY = "needs_evidence_priority"
     SMALL_BATCH_TEST = "small_batch_test"
     PRIORITY_TEST = "priority_test"
     FOCUS_DEVELOPMENT = "focus_development"

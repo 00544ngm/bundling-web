@@ -27,7 +27,6 @@ def test_task_provider_type_is_limited_to_primary_provider_slots():
     assert get_args(job_schemas.TaskProvider) == (
         "openai",
         "custom",
-        "claude",
     )
 
 
@@ -56,6 +55,7 @@ async def test_submit_persists_before_enqueueing():
         mode="hypothesis",
         request_payload={
             "url": VALID_URL,
+            "bundle_plans_enabled": True,
             "expected_model_version": "combination_model_v2.1",
             "requested_at_revision": "abc1234",
         },
@@ -65,6 +65,40 @@ async def test_submit_persists_before_enqueueing():
     queue.enqueue.assert_awaited_once_with("run_analysis_job", str(job.id))
     assert repository.create.await_count == 1
     assert queue.enqueue.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_bundle_plans_switch_reaches_the_stored_request_payload():
+    """The worker pops this key from request_payload, so the request must persist it.
+
+    Regression guard for a real defect: the key was honoured by the worker but
+    never declared on the request schema, so it was dropped before storage and
+    the stage could not be turned off from any client.
+    """
+    job = SimpleNamespace(id=uuid4(), status="queued")
+    repository = AsyncMock()
+    repository.create.return_value = job
+    service = JobService(repository=repository, queue=AsyncMock())
+
+    await service.submit_hypothesis(
+        HypothesisJobCreate(url=VALID_URL, bundle_plans_enabled=False)
+    )
+
+    payload = repository.create.await_args.kwargs["request_payload"]
+    assert payload["bundle_plans_enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_bundle_plans_switch_is_on_by_default():
+    job = SimpleNamespace(id=uuid4(), status="queued")
+    repository = AsyncMock()
+    repository.create.return_value = job
+    service = JobService(repository=repository, queue=AsyncMock())
+
+    await service.submit_hypothesis(HypothesisJobCreate(url=VALID_URL))
+
+    payload = repository.create.await_args.kwargs["request_payload"]
+    assert payload["bundle_plans_enabled"] is True
 
 
 @pytest.mark.asyncio
@@ -290,6 +324,7 @@ async def test_submit_batch_uses_batch_mode():
         mode="batch",
         request_payload={
             "urls": ["https://www.walmart.com/ip/example/12345"],
+            "bundle_plans_enabled": True,
             "expected_model_version": "combination_model_v2.1",
             "requested_at_revision": "abc1234",
         },
@@ -297,6 +332,25 @@ async def test_submit_batch_uses_batch_mode():
         retry_of_id=None,
     )
     queue.enqueue.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_batch_can_disable_the_bundle_stage_per_request():
+    """Batch pays the extra call once per URL, so the switch matters most here."""
+    job = SimpleNamespace(id=uuid4(), status="queued")
+    repository = AsyncMock()
+    repository.create.return_value = job
+    service = JobService(repository=repository, queue=AsyncMock())
+
+    await service.submit_batch(
+        BatchJobCreate(
+            urls=["https://www.walmart.com/ip/example/12345"],
+            bundle_plans_enabled=False,
+        )
+    )
+
+    payload = repository.create.await_args.kwargs["request_payload"]
+    assert payload["bundle_plans_enabled"] is False
 
 
 @pytest.mark.asyncio

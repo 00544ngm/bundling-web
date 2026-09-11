@@ -185,6 +185,10 @@ LEGACY_WEIGHTS = {
     "mental_copurchase": 10,
     "user_scene": 5,
 }
+#: Score at which a held candidate is worth verifying before the rest. Matches
+#: the threshold the higher tiers already use, so the ladder stays coherent.
+_PRIORITY_EVIDENCE_SCORE = 85
+
 MARKET_POINTS = {"E0": 0, "E1": 2, "E2": 5, "E3": 8, "E4": 10}
 EVIDENCE_CAPS = {"E0": 59, "E1": 69, "E2": 79, "E3": 89, "E4": 100}
 
@@ -400,6 +404,11 @@ def _v21_decision_action(
     if score < 78:
         return DecisionAction.OBSERVE
     if status is ExecutionStatus.HOLD or evidence in {EvidenceLevel.E0, EvidenceLevel.E1}:
+        # Verification is still required either way; the score decides only how
+        # soon. Collapsing both onto one action discarded the whole spread: 47 of
+        # 47 real candidates landed here while their scores ranged 76-100.
+        if score >= _PRIORITY_EVIDENCE_SCORE:
+            return DecisionAction.NEEDS_EVIDENCE_PRIORITY
         return DecisionAction.NEEDS_EVIDENCE
     if score >= 85 and evidence is EvidenceLevel.E4:
         return DecisionAction.FOCUS_DEVELOPMENT
@@ -413,7 +422,9 @@ def _recommendation_for_action(action: DecisionAction) -> str:
         return "focus"
     if action in {DecisionAction.PRIORITY_TEST, DecisionAction.SMALL_BATCH_TEST}:
         return "test_pool"
-    if action is DecisionAction.OBSERVE:
+    # A high-scoring candidate that still needs verification is not the same as
+    # one nobody should bother with; the medium bucket keeps that visible.
+    if action in {DecisionAction.OBSERVE, DecisionAction.NEEDS_EVIDENCE_PRIORITY}:
         return "observe"
     return "not_recommended"
 

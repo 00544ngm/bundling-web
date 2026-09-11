@@ -24,6 +24,10 @@ from backend.security.auth import get_current_user, require_admin
 
 
 def require_loopback(request: Request) -> None:
+    from backend.config import get_backend_settings
+
+    if get_backend_settings().allow_remote_settings:
+        return
     host = request.client.host if request.client else ""
     if host not in {"127.0.0.1", "::1", "test"}:
         raise HTTPException(

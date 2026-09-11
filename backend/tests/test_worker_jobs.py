@@ -998,3 +998,91 @@ async def test_worker_removes_contract_metadata_before_provider_resolution(mock_
     kwargs = runner.run_hypothesis.await_args.kwargs
     assert kwargs["expected_model_version"] == "combination_model_v2.1"
     assert "requested_at_revision" not in kwargs
+
+
+@pytest.mark.asyncio
+async def test_worker_runs_bundle_stage_by_default(mock_ctx):
+    """Submissions predating the flag must still get the bundle plan stage."""
+    repository = AsyncMock()
+    repository.transition = AsyncMock(return_value=_claimed_job())
+    runner = AsyncMock()
+    runner.run_hypothesis = AsyncMock(
+        return_value=RunnerResult(result_payload={"grade": "A"}, artifacts=[])
+    )
+
+    with (
+        patch.object(worker_jobs, "SessionFactory"),
+        patch.object(worker_jobs, "JobRepository", return_value=repository),
+        patch.object(worker_jobs, "AnalysisRunner", return_value=runner),
+        patch.object(worker_jobs, "_create_browser"),
+        patch.object(
+            worker_jobs, "_create_provider_resolver", return_value=_resolver_stub()
+        ),
+    ):
+        worker_jobs.SessionFactory.return_value.__aenter__.return_value = AsyncMock()
+        await worker_jobs.run_analysis_job(mock_ctx, str(uuid4()))
+
+    assert runner.run_hypothesis.await_args.kwargs["include_bundle_plans"] is True
+
+
+@pytest.mark.asyncio
+async def test_worker_honours_bundle_plans_disabled(mock_ctx):
+    repository = AsyncMock()
+    repository.transition = AsyncMock(
+        return_value=_claimed_job(
+            request_payload={
+                "url": "https://walmart.com/ip/test",
+                "bundle_plans_enabled": False,
+            }
+        )
+    )
+    runner = AsyncMock()
+    runner.run_hypothesis = AsyncMock(
+        return_value=RunnerResult(result_payload={"grade": "A"}, artifacts=[])
+    )
+
+    with (
+        patch.object(worker_jobs, "SessionFactory"),
+        patch.object(worker_jobs, "JobRepository", return_value=repository),
+        patch.object(worker_jobs, "AnalysisRunner", return_value=runner),
+        patch.object(worker_jobs, "_create_browser"),
+        patch.object(
+            worker_jobs, "_create_provider_resolver", return_value=_resolver_stub()
+        ),
+    ):
+        worker_jobs.SessionFactory.return_value.__aenter__.return_value = AsyncMock()
+        await worker_jobs.run_analysis_job(mock_ctx, str(uuid4()))
+
+    assert runner.run_hypothesis.await_args.kwargs["include_bundle_plans"] is False
+
+
+@pytest.mark.asyncio
+async def test_worker_forwards_bundle_plans_flag_to_batch(mock_ctx):
+    repository = AsyncMock()
+    repository.transition = AsyncMock(
+        return_value=_claimed_job(
+            mode="batch",
+            request_payload={
+                "urls": ["https://walmart.com/ip/test"],
+                "bundle_plans_enabled": False,
+            },
+        )
+    )
+    runner = AsyncMock()
+    runner.run_batch = AsyncMock(
+        return_value=RunnerResult(result_payload={"results": []}, artifacts=[])
+    )
+
+    with (
+        patch.object(worker_jobs, "SessionFactory"),
+        patch.object(worker_jobs, "JobRepository", return_value=repository),
+        patch.object(worker_jobs, "AnalysisRunner", return_value=runner),
+        patch.object(worker_jobs, "_create_browser"),
+        patch.object(
+            worker_jobs, "_create_provider_resolver", return_value=_resolver_stub()
+        ),
+    ):
+        worker_jobs.SessionFactory.return_value.__aenter__.return_value = AsyncMock()
+        await worker_jobs.run_analysis_job(mock_ctx, str(uuid4()))
+
+    assert runner.run_batch.await_args.kwargs["include_bundle_plans"] is False

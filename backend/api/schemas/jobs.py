@@ -11,7 +11,7 @@ from app.domain.product_url import detect_product_platform
 
 JobMode = Literal["hypothesis", "judgment", "batch"]
 JobStatus = Literal["queued", "running", "completed", "failed", "interrupted"]
-TaskProvider = Literal["openai", "custom", "claude"]
+TaskProvider = Literal["openai", "custom"]
 
 
 class RotationCandidate(BaseModel):
@@ -70,6 +70,10 @@ class HypothesisJobCreate(RotationRequestFields):
     url: str
     model: str | None = None
     provider: TaskProvider | None = None
+    # Declared on the request model on purpose: the worker reads this key out of
+    # the stored request_payload, and an undeclared field would be dropped here
+    # silently, leaving the switch permanently unreachable from any client.
+    bundle_plans_enabled: bool = True
 
     _validate_url = field_validator("url")(_validated_url)
 
@@ -94,6 +98,8 @@ class BatchJobCreate(RotationRequestFields):
     urls: list[str] = Field(min_length=1, max_length=500)
     model: str | None = None
     provider: TaskProvider | None = None
+    # Batch runs the stage once per URL, so the cost argument is strongest here.
+    bundle_plans_enabled: bool = True
 
     @field_validator("urls")
     @classmethod

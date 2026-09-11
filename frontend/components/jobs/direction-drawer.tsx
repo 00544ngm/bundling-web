@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { X, Copy, Search, Scale, PackageCheck } from "lucide-react";
 import FieldGrid from "@/components/jobs/field-grid";
+import { writeToClipboard } from "@/lib/clipboard";
 import { cleanLabel, parseFmtText, pickField, scoreTone } from "@/lib/result-format";
 import type { StructuredDirection } from "@/lib/api/types";
 import { evidenceLevelLabel, formatStrategy, relationLabel } from "@/lib/result-labels";
@@ -64,7 +65,7 @@ export default function DirectionDrawer({ dir, sections, onClose }: DirectionDra
       dir.cost && `1688成本: ${cleanLabel(dir.cost)}`,
       dir.strategy && `定价策略: ${formatStrategy(dir.strategy)}`,
     ].filter(Boolean);
-    navigator.clipboard?.writeText(lines.join("\n")).catch(() => {});
+    void writeToClipboard(lines.join("\n"));
   };
 
   return (

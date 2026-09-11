@@ -264,6 +264,132 @@ export interface ModelResult extends ResultReliabilityFields {
   b_products?: JudgmentBProductMetadata[];
 }
 
+/** Instruction C output: whole-configuration bundle plans, built on scored directions. */
+export type BundlePlanRank = "first" | "second" | "third" | "exploratory";
+export type BundleOutcome = "keep" | "drop" | "conditional";
+
+export interface BundleAccessorySpec {
+  problem_to_solve?: string;
+  required_functions?: string[];
+  must_meet?: string[];
+  nice_to_have?: string[];
+  not_required?: string[];
+  adjustable_specs?: string[];
+  search_keywords_en?: string[];
+  search_keywords_1688?: string[];
+}
+
+export interface BundleScenarioComparison {
+  name?: string;
+  target_user?: string;
+  task?: string;
+  purchase_trigger?: string;
+  gap?: string;
+  evidence?: string;
+  existing_supplies_sufficient?: boolean;
+  selected?: boolean;
+}
+
+export interface BundleAccessoryCandidate {
+  candidate_kind?: string;
+  product_name_zh?: string;
+  original_title?: string;
+  brand?: string;
+  model?: string;
+  variant?: string;
+  detail_url?: string;
+  quantity?: number;
+  verified_specs?: string[];
+  price_condition?: string;
+  role_in_bundle?: string;
+  selected?: boolean;
+  selection_reason?: string;
+  missing_decisive_info?: string[];
+}
+
+export interface BundleMember {
+  canonical_name?: string;
+  name_zh?: string;
+  quantity?: number;
+  role?: string;
+  accessory_spec?: BundleAccessorySpec | null;
+  candidates?: BundleAccessoryCandidate[];
+}
+
+export interface BundleIncrementTest {
+  member_name?: string;
+  solved_problem?: string;
+  incremental_gain?: string;
+  removal_loss?: string;
+  removal_cost_saving?: string;
+  add_outcome?: BundleOutcome;
+  remove_outcome?: BundleOutcome;
+}
+
+export interface BundleCounterfactual {
+  alternative?: string;
+  what_changes?: string;
+  advantage_over_bundle?: string;
+  bundle_advantage?: string;
+  conclusion?: string;
+  preferred?: boolean;
+}
+
+export interface BundleBuyerRationale {
+  likely_buyer?: string;
+  purchase_trigger?: string;
+  primary_reason?: string;
+  concrete_improvement?: string;
+  main_objection?: string;
+  supporting_evidence?: string[];
+  opposing_evidence?: string[];
+}
+
+export interface BundleMarginAnalysis {
+  bundle_price_estimate?: string;
+  procurement_cost_estimate?: string;
+  packaging_cost_estimate?: string;
+  gross_margin_note?: string;
+  price_uplift_reason?: string;
+  assumptions?: string[];
+}
+
+export interface BundlePlan {
+  rank?: BundlePlanRank;
+  positioning?: string;
+  development_mode?: string;
+  members?: BundleMember[];
+  bundle_size?: number;
+  scenario_comparison?: BundleScenarioComparison[];
+  scenario_note?: string;
+  buyer_rationale?: BundleBuyerRationale | null;
+  increment_tests?: BundleIncrementTest[];
+  counterfactuals?: BundleCounterfactual[];
+  accessory_collaboration?: string;
+  internal_conflicts?: string[];
+  fit_status?: string;
+  commercial_value?: string;
+  verification_priority?: string;
+  sourcing_maturity?: string;
+  evidence_confidence?: string;
+  margin?: BundleMarginAnalysis | null;
+  ranking_rationale?: string;
+  conditions?: string[];
+  rejection_reasons?: string[];
+  unknowns?: string[];
+  used_direction_names?: string[];
+}
+
+export interface BundlePlansPayload {
+  stage_version?: string;
+  result_status?: "completed" | "unavailable";
+  unavailable_reason?: string;
+  verdict?: "plans_ready" | "no_viable_bundle" | "insufficient_evidence";
+  verdict_statement?: string;
+  plans?: BundlePlan[];
+  exploratory_plans?: BundlePlan[];
+}
+
 export interface CrossReviewEntry {
   raw?: string;
   error?: string;
@@ -303,6 +429,11 @@ export interface JobResultPayload extends ResultReliabilityFields {
   product_type_review?: ProductTypeReview;
   rejected_b_products?: RejectedBProduct[];
   b_products?: JudgmentBProductMetadata[];
+  /**
+   * Instruction C. Sits at the top level of the payload, not inside `models`:
+   * the stage runs once on the primary provider even for a dual-model job.
+   */
+  bundle_plans?: BundlePlansPayload;
 }
 
 export interface JobDetail extends JobSummary {
@@ -370,7 +501,7 @@ export interface SearchResponse {
   results: SearchProduct[];
 }
 
-export type ProviderSlug = "openai" | "deepseek" | "custom" | "claude";
+export type ProviderSlug = "openai" | "deepseek" | "custom";
 export type ProviderRole = "primary" | "secondary";
 export type ProviderApiProtocol = "openai" | "anthropic";
 export type ProviderModelTestStatus =
@@ -422,8 +553,6 @@ export interface ProviderModelOption {
   last_used_at?: string | null;
   use_count?: number;
   last_auto_tested_at?: string | null;
-  last_acted_by?: string | null;
-  last_acted_at?: string | null;
   transport_mode?: OpenAITransportMode | null;
   structured_output_mode?: OpenAIStructuredOutputMode | null;
 }

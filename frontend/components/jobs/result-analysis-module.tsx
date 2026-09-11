@@ -11,6 +11,8 @@ import type { CrossReviewEntry, ModelResult, StructuredDirection } from "@/lib/a
 import type { ResultStatus } from "@/lib/api/types";
 import type { ProductTypeReview, RejectedBProduct } from "@/lib/api/types";
 import ProductTypeReviewCard from "@/components/jobs/product-type-review-card";
+import BundlePlanPanel from "@/components/jobs/bundle-plan-panel";
+import type { BundlePlansPayload } from "@/lib/api/types";
 import type { SearchState } from "@/components/jobs/platform-search-panel";
 
 export interface ResultSection { title: string; content?: string; children?: ResultSection[]; }
@@ -22,8 +24,9 @@ interface Props {
   modelVersion?: string; resultStatus?: ResultStatus; resultMessage?: string;
   auditOutcome?: string; rejectionSummary?: Record<string, number>;
   productTypeReview?: ProductTypeReview; rejectedBProducts?: RejectedBProduct[];
+  bundlePlans?: BundlePlansPayload;
 }
-type View = "directions" | "evidence" | "keywords" | "cross-review";
+type View = "directions" | "bundle-plans" | "evidence" | "keywords" | "cross-review";
 
 export default function ResultAnalysisModule(props: Props) {
   const directions = useMemo(() => props.structuredDirections ?? [], [props.structuredDirections]);
@@ -73,7 +76,15 @@ export default function ResultAnalysisModule(props: Props) {
       {props.crossReview && Object.keys(props.crossReview).length > 0 && <CrossReviewPanel crossReview={props.crossReview} models={props.models} />}
     </div>;
   }
-  const views: Array<[View, string]> = [["directions", "方向研究"], ["evidence", "商品与证据"], ["keywords", "关键词包"], ["cross-review", "交叉验证"]];
+  // The bundle tab only exists for results that carry the instruction C block,
+  // so historical tasks keep exactly the tabs they had before.
+  const views: Array<[View, string]> = [
+    ["directions", "方向研究"],
+    ...(props.bundlePlans ? ([["bundle-plans", "组合方案"]] as Array<[View, string]>) : []),
+    ["evidence", "商品与证据"],
+    ["keywords", "关键词包"],
+    ["cross-review", "交叉验证"],
+  ];
   return <div className="space-y-3">{props.productTypeReview && <ProductTypeReviewCard review={props.productTypeReview} />}{rejectedProducts}{statusNotice}<section className="overflow-hidden border bg-background">
     <div className="grid gap-4 border-b p-4 sm:grid-cols-[96px_minmax(0,1fr)_auto] sm:items-center">
       <ProductMedia src={props.productImages} alt={props.productTitle || props.productTitleZh || "主品图片"} emptyLabel="历史无图" className="w-24" />
@@ -82,6 +93,7 @@ export default function ResultAnalysisModule(props: Props) {
     </div>
     <div className="flex overflow-x-auto border-b bg-muted/20 p-1" role="tablist" aria-label="结果视图">{views.map(([key, label]) => <button key={key} role="tab" aria-selected={view === key} onClick={() => setView(key)} className={view === key ? "shrink-0 border-b-2 border-primary px-4 py-2 text-sm font-medium" : "shrink-0 border-b-2 border-transparent px-4 py-2 text-sm text-muted-foreground"}>{label}</button>)}</div>
     {view === "directions" && active && <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] lg:grid-cols-[300px_minmax(0,1fr)]"><DirectionList directions={directions} activeName={active.name} onSelect={(item) => setActiveName(item.name)} /><DirectionDetail direction={active} searchState={searchStates[activeSearchKey] ?? { status: "idle" }} onSearchState={(state) => setSearchStates((current) => ({ ...current, [activeSearchKey]: state }))} /></div>}
+    {view === "bundle-plans" && <BundlePlanPanel bundlePlans={props.bundlePlans} />}
     {view === "evidence" && <div className="p-4"><ResultSections sections={evidenceSections} /></div>}
     {view === "keywords" && <div className="p-4">{props.keywordPack?.length ? <ul className="grid gap-2 sm:grid-cols-2">{props.keywordPack.map((word) => <li key={word} className="keyword-text border px-3 py-2">{word}</li>)}</ul> : <p>当前结果没有保存关键词包</p>}</div>}
     {view === "cross-review" && (props.crossReview && Object.keys(props.crossReview).length ? <CrossReviewPanel crossReview={props.crossReview} models={props.models} /> : <p className="p-6 text-sm text-muted-foreground">当前任务没有交叉验证结果</p>)}

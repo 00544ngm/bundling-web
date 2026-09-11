@@ -19,8 +19,15 @@ from app.infrastructure.llm.openai_compat import (
 
 _MODELS_USE_COMPLETION_TOKENS = {"o1", "o3", "o4"}
 _MODELS_USE_COMPLETION_TOKENS_PREFIX = ("gpt-5.",)
-_MODELS_NO_TEMPERATURE = _MODELS_USE_COMPLETION_TOKENS | {"gpt-5.5", "gpt-5.5-pro"}
-_MODELS_NO_TEMPERATURE_PREFIX = ()
+# The Responses API path used to drop `temperature` for every model, which hid
+# the fact that this list was incomplete: gpt-5.6 rejects the parameter with a
+# 400. Keep the list exhaustive, because the request is built from it.
+_MODELS_NO_TEMPERATURE = _MODELS_USE_COMPLETION_TOKENS | {
+    "gpt-5.5",
+    "gpt-5.5-pro",
+    "gpt-5.6",
+}
+_MODELS_NO_TEMPERATURE_PREFIX = ("gpt-5.5-", "gpt-5.6-")
 
 _DEFAULT_STRUCTURED_REPORT_TIMEOUT_SECONDS = 120.0
 _SLOW_STRUCTURED_REPORT_TIMEOUT_SECONDS = 600.0
@@ -229,7 +236,12 @@ class OpenAILLMClient(LLMClientInterface):
             if explicit_max_tokens is None
             else explicit_max_tokens
         )
-        request_timeout = report_timeout_seconds(model, "openai")
+        # A caller may need a longer deadline than the shared per-model policy,
+        # e.g. the bundle stage emits three complete plans in one response.
+        # Popped rather than left in kwargs: passing it twice is a TypeError.
+        request_timeout = kwargs.pop(
+            "timeout", report_timeout_seconds(model, "openai")
+        )
         token_param = _token_param(model, max_tokens)
         temp_param = _temperature_param(model, temperature)
         structured_output_mode = self._structured_output_mode

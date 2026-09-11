@@ -59,6 +59,8 @@ const decisionLabels: LabelMap = {
   not_recommended: "不建议",
   observe: "观察",
   needs_evidence: "需要证据",
+  // Same "not verified yet" state as needs_evidence, but worth verifying first.
+  needs_evidence_priority: "优先补证据",
   small_batch_test: "小批量测试",
   priority_test: "优先测试",
   focus_development: "重点开发",
@@ -131,6 +133,91 @@ export function recommendationDisplayLabel(value?: string | null): string {
 
 export function rejectionCodeLabel(value: string): string {
   return withOriginal(value, rejectionCodeLabels[value]);
+}
+
+const bundleRankLabels: LabelMap = {
+  first: "第一名",
+  second: "第二名",
+  third: "第三名",
+  exploratory: "探索候选",
+};
+
+const developmentModeLabels: LabelMap = {
+  stock_bundle: "现货组套",
+  light_adaptation: "轻度适配",
+  custom_development: "定制开发",
+};
+
+const fitStatusLabels: LabelMap = {
+  supported_pending_sample: "资料支持匹配，待样品验证",
+  pending_key_params: "待关键参数确认",
+  known_mismatch: "已知不匹配",
+};
+
+const importanceLevelLabels: LabelMap = {
+  high: "高",
+  medium: "中",
+  low: "低",
+};
+
+const bundleOutcomeLabels: LabelMap = {
+  keep: "保留",
+  drop: "可以删除",
+  conditional: "条件性保留",
+};
+
+const counterfactualLabels: LabelMap = {
+  main_only: "只买主品",
+  improved_main: "改进主品",
+  fewer_accessories: "更少辅品的配置",
+  more_accessories: "更多辅品的配置",
+  own_existing_supplies: "使用家里已有用品",
+  buy_separately: "分别购买同等商品",
+  market_bundle: "市场已有的完整套装",
+  integrated_product: "能完成相同任务的一体化产品",
+};
+
+const candidateKindLabels: LabelMap = {
+  standalone_accessory: "独立辅品市场参考",
+  bundle_competitor: "整套竞品参考",
+  brand_reference: "品牌结构参考",
+  supply_candidate: "供应端采购候选",
+  custom_concept: "需要定制的概念方案",
+};
+
+export function bundleRankLabel(value?: string | null): string {
+  if (!value) return "未标名次";
+  return bundleRankLabels[value] ?? value;
+}
+
+export function developmentModeLabel(value?: string | null): string {
+  if (!value) return "-";
+  return withOriginal(value, developmentModeLabels[value]);
+}
+
+export function fitStatusLabel(value?: string | null): string {
+  if (!value) return "适配状态未标注";
+  return fitStatusLabels[value] ?? value;
+}
+
+export function importanceLevelLabel(value?: string | null): string {
+  if (!value) return "-";
+  return importanceLevelLabels[value] ?? value;
+}
+
+export function bundleOutcomeLabel(value?: string | null): string {
+  if (!value) return "-";
+  return bundleOutcomeLabels[value] ?? value;
+}
+
+export function counterfactualLabel(value?: string | null): string {
+  if (!value) return "未标注替代方案";
+  return counterfactualLabels[value] ?? value;
+}
+
+export function candidateKindLabel(value?: string | null): string {
+  if (!value) return "-";
+  return candidateKindLabels[value] ?? value;
 }
 
 export function formatStrategy(value?: string | null): string {

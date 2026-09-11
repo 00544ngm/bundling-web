@@ -602,3 +602,207 @@ def test_each_result_status_accepts_only_its_canonical_message(payload):
     validate_hypothesis_payload(
         payload, expected_model_version="combination_model_v2.1"
     )
+
+
+# --- bundle plan block (instruction C) ---------------------------------------
+
+BUNDLE_CANONICAL = "compatible_filter"
+
+
+def _bundle_member(canonical_name=BUNDLE_CANONICAL, name_zh="兼容滤芯", **overrides):
+    member = {"canonical_name": canonical_name, "name_zh": name_zh}
+    member.update(overrides)
+    return member
+
+
+def _bundle_plan(**overrides):
+    plan = {
+        "rank": "first",
+        "members": [_bundle_member()],
+        "bundle_size": 1,
+        "increment_tests": [{"member_name": "兼容滤芯"}],
+        "counterfactuals": [
+            {"alternative": "main_only"},
+            {"alternative": "own_existing_supplies"},
+        ],
+        "used_direction_names": [BUNDLE_CANONICAL],
+    }
+    plan.update(overrides)
+    return plan
+
+
+def _bundle_block(**overrides):
+    block = {
+        "stage_version": "bundle_stage_v1",
+        "result_status": "completed",
+        "unavailable_reason": "",
+        "verdict": "plans_ready",
+        "verdict_statement": "有一组可落地",
+        "plans": [_bundle_plan()],
+        "exploratory_plans": [],
+    }
+    block.update(overrides)
+    return block
+
+
+def _bundle_payload(block=None, **overrides):
+    block = _bundle_block() if block is None else block
+    return _payload(
+        directions=[_direction(canonical_name=BUNDLE_CANONICAL)],
+        bundle_plans=block,
+        **overrides,
+    )
+
+
+def test_payload_without_bundle_block_is_unchanged():
+    """Every stored legacy payload lacks the key, so it skips all new checks."""
+    validate_hypothesis_payload(
+        _payload(directions=[_direction(canonical_name=BUNDLE_CANONICAL)]),
+        expected_model_version="combination_model_v2.1",
+    )
+
+
+def test_valid_bundle_plan_block_passes():
+    validate_hypothesis_payload(
+        _bundle_payload(), expected_model_version="combination_model_v2.1"
+    )
+
+
+def test_unavailable_bundle_block_passes():
+    validate_hypothesis_payload(
+        _bundle_payload(
+            _bundle_block(
+                result_status="unavailable",
+                unavailable_reason="provider exploded",
+                verdict="insufficient_evidence",
+                verdict_statement="",
+                plans=[],
+            )
+        ),
+        expected_model_version="combination_model_v2.1",
+    )
+
+
+def test_empty_bundle_block_with_verdict_statement_passes():
+    validate_hypothesis_payload(
+        _bundle_payload(
+            _bundle_block(
+                verdict="no_viable_bundle",
+                verdict_statement="没有值得成套的方案",
+                plans=[],
+            )
+        ),
+        expected_model_version="combination_model_v2.1",
+    )
+
+
+def test_exploratory_plan_with_exploratory_rank_passes():
+    validate_hypothesis_payload(
+        _bundle_payload(
+            _bundle_block(
+                plans=[],
+                verdict="no_viable_bundle",
+                verdict_statement="仅有探索候选",
+                exploratory_plans=[_bundle_plan(rank="exploratory")],
+            )
+        ),
+        expected_model_version="combination_model_v2.1",
+    )
+
+
+@pytest.mark.parametrize(
+    "block",
+    [
+        "not-an-object",
+        _bundle_block(stage_version="bundle_stage_v2"),
+        _bundle_block(result_status="exploded"),
+        _bundle_block(
+            result_status="unavailable",
+            unavailable_reason="boom",
+            verdict="insufficient_evidence",
+            plans=[_bundle_plan()],
+        ),
+        _bundle_block(
+            result_status="unavailable",
+            unavailable_reason="",
+            verdict="insufficient_evidence",
+            plans=[],
+        ),
+        _bundle_block(verdict="no_viable_bundle"),
+        _bundle_block(verdict="no_viable_bundle", verdict_statement="", plans=[]),
+        _bundle_block(verdict="invented_verdict"),
+        _bundle_block(
+            plans=[
+                _bundle_plan(rank="first"),
+                _bundle_plan(rank="second"),
+                _bundle_plan(rank="third"),
+                _bundle_plan(rank="second"),
+            ]
+        ),
+        _bundle_block(plans=[_bundle_plan(rank="first"), _bundle_plan(rank="first")]),
+        _bundle_block(plans=[_bundle_plan(bundle_size=2)]),
+        _bundle_block(plans=[_bundle_plan(bundle_size=0)]),
+        _bundle_block(plans=[_bundle_plan(members=[])]),
+        _bundle_block(
+            plans=[_bundle_plan(members=[_bundle_member(canonical_name="ghost")])]
+        ),
+        _bundle_block(plans=[_bundle_plan(used_direction_names=["ghost"])]),
+        _bundle_block(plans=[_bundle_plan(increment_tests=[])]),
+        _bundle_block(plans=[_bundle_plan(counterfactuals=[{"alternative": "main_only"}])]),
+        _bundle_block(
+            plans=[
+                _bundle_plan(
+                    counterfactuals=[{"alternative": "own_existing_supplies"}]
+                )
+            ]
+        ),
+        _bundle_block(
+            plans=[
+                _bundle_plan(
+                    counterfactuals=[
+                        {"alternative": "main_only"},
+                        {"alternative": "main_only"},
+                    ]
+                )
+            ]
+        ),
+        _bundle_block(
+            exploratory_plans=[_bundle_plan(rank="first")],
+        ),
+        _bundle_block(plans=[_bundle_plan(final_score=91)]),
+        _bundle_block(plans=[_bundle_plan(members=[_bundle_member(score_cap=100)])]),
+        _bundle_block(verdict_statement="", plans=[]),
+    ],
+)
+def test_invalid_bundle_block_fails_quality_gate(block):
+    with pytest.raises(ResultQualityError) as error:
+        validate_hypothesis_payload(
+            _bundle_payload(block), expected_model_version="combination_model_v2.1"
+        )
+
+    assert error.value.code == "RESULT_QUALITY_INVALID"
+    assert error.value.retryable is False
+
+
+def test_bundle_stage_cannot_smuggle_a_server_owned_score():
+    """The model must never author final_score, even nested deep in a plan."""
+    payload = _bundle_payload()
+    payload["bundle_plans"]["plans"][0]["buyer_rationale"] = {"final_score": 91}
+
+    with pytest.raises(ResultQualityError, match="server-owned fields"):
+        validate_hypothesis_payload(
+            payload, expected_model_version="combination_model_v2.1"
+        )
+
+
+def test_validate_bundle_plan_payload_requires_the_block():
+    from backend.application.result_quality import validate_bundle_plan_payload
+
+    with pytest.raises(ResultQualityError, match="missing"):
+        validate_bundle_plan_payload(_payload())
+
+
+def test_validate_bundle_plan_payload_accepts_a_valid_block():
+    from backend.application.result_quality import validate_bundle_plan_payload
+
+    validate_bundle_plan_payload(_bundle_payload())

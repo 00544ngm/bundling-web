@@ -68,6 +68,55 @@ _NON_FOOD_PHRASES = (
     "ironing board",
 )
 
+#: Nouns that name the container or the surface rather than the substance. When
+#: an ingestible phrase directly modifies one of these, the phrase describes what
+#: the product is *for*, not what the product *is*: a silicone "dog food mat" is
+#: a mat, a "cat food storage container" is a container. Treating those as food
+#: blocked a real accessory and left the run with no eligible B product at all.
+#: The match must be directly adjacent, so a genuine "Dog Food, 30 lb Bag" is
+#: still blocked.
+_CONTAINER_SURFACE_NOUNS = (
+    "mat",
+    "mats",
+    "placemat",
+    "placemats",
+    "bowl",
+    "bowls",
+    "dish",
+    "dishes",
+    "tray",
+    "trays",
+    "container",
+    "containers",
+    "storage",
+    "bin",
+    "bins",
+    "box",
+    "boxes",
+    "bucket",
+    "buckets",
+    "jar",
+    "jars",
+    "canister",
+    "canisters",
+    "scoop",
+    "scoops",
+    "dispenser",
+    "dispensers",
+    "feeder",
+    "feeders",
+    "rack",
+    "racks",
+    "shelf",
+    "shelves",
+    "stand",
+    "stands",
+    "lid",
+    "lids",
+    "holder",
+    "holders",
+)
+
 _INGESTIBLE_PHRASES = (
     "bottled water",
     "spring water",
@@ -120,7 +169,11 @@ def classify_product_type(
     # descriptions often mention usage contexts such as "snack table" or "dog food
     # storage"; those fields remain available to the model reviewer but cannot alone
     # turn a non-food product into an ingestible product.
-    ingestible_matches = _find_phrases(entity_text, _INGESTIBLE_PHRASES)
+    ingestible_matches = tuple(
+        phrase
+        for phrase in _find_phrases(entity_text, _INGESTIBLE_PHRASES)
+        if not _modifies_container_or_surface(entity_text, phrase)
+    )
     if entity_non_food_matches and not ingestible_matches:
         return ProductTypeDecision(
             ProductTypeStatus.NON_FOOD,
@@ -171,6 +224,18 @@ def _find_phrases(text: str, phrases: tuple[str, ...]) -> tuple[str, ...]:
         phrase
         for phrase in phrases
         if re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", text)
+    )
+
+
+def _modifies_container_or_surface(text: str, phrase: str) -> bool:
+    """True when the phrase directly names a container or surface instead.
+
+    Only an adjacent noun counts, so the ambiguity this resolves stays narrow:
+    "dog food mat" is a mat, while "dog food 30 lb bag" is still food.
+    """
+    return any(
+        re.search(rf"(?<!\w){re.escape(phrase)}\s+{re.escape(noun)}(?!\w)", text)
+        for noun in _CONTAINER_SURFACE_NOUNS
     )
 
 

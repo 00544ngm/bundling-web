@@ -5,7 +5,7 @@ import { CheckCircle2, Clock3, Link2, Search, ShieldAlert, XCircle } from "lucid
 import type { ScoreBreakdown, StructuredDirection } from "@/lib/api/types";
 import { buildDecisionGuidance } from "@/lib/decision-guidance";
 import { directionFinalScore, normalizeExtendedScenarios, normalizeRelationReasons } from "@/lib/result-workbench";
-import { evidenceLevelLabel, formatKeywordDisplay, purchaseChainKeyLabel, recommendationDisplayLabel, rejectionCodeLabel, relationLabel } from "@/lib/result-labels";
+import { decisionActionLabel, evidenceLevelLabel, executionStatusLabel, formatKeywordDisplay, purchaseChainKeyLabel, recommendationDisplayLabel, rejectionCodeLabel, relationLabel } from "@/lib/result-labels";
 import ProductTypeReviewCard from "@/components/jobs/product-type-review-card";
 
 const scoreLabels: Array<[keyof ScoreBreakdown, keyof ScoreBreakdown, string]> = [
@@ -254,8 +254,8 @@ export default function StickinessScorecard({
           <summary className="cursor-pointer font-medium text-foreground">技术详情</summary>
           {showTechnicalDetails && (
             <dl className="mt-3 grid gap-2 sm:grid-cols-[140px_minmax(0,1fr)]">
-              <dt>执行状态</dt><dd>{direction.execution_status ?? "-"}</dd>
-              <dt>最终动作</dt><dd>{direction.decision_action ?? "-"}</dd>
+              <dt>执行状态</dt><dd>{executionStatusLabel(direction.execution_status)}</dd>
+              <dt>最终动作</dt><dd>{decisionActionLabel(direction.decision_action)}</dd>
               <dt>拒绝代码</dt><dd>{direction.rejection_codes?.map(rejectionCodeLabel).join("、") || "-"}</dd>
             </dl>
           )}

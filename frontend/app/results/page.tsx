@@ -127,6 +127,7 @@ export default function ResultsPage() {
                 keywordPack={activeResult?.keyword_pack ?? payload?.keyword_pack}
                 crossReview={crossReview}
                 models={models}
+                bundlePlans={payload?.bundle_plans}
               />
             )}
 

@@ -17,6 +17,7 @@ from backend.api.dependencies import (
 )
 from backend.api.schemas.jobs import JobNameUpdate
 from backend.application.errors import ConflictError, NotFoundError
+from backend.application.job_service import JobService
 from backend.api.dependencies import get_api_group_repository
 from backend.config import BackendSettings, get_backend_settings
 from backend.main import create_app
@@ -64,6 +65,40 @@ async def test_submit_hypothesis_returns_accepted_job():
     assert response.status_code == 202
     assert response.json()["status"] == "queued"
     service.submit_hypothesis.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_bundle_plans_switch_survives_the_http_boundary():
+    """End to end: request body -> real JobService -> stored request_payload.
+
+    The worker pops this key from the stored payload, so a request field the
+    API layer silently drops makes the switch unreachable from every client.
+    Mocking the service here would hide exactly that, hence the real one.
+
+    Merged from 项目A（对应 A 的 e40a5d5）。合并版的路由要求登录，故补上
+    get_current_user / get_api_group_repository 的 override。
+    """
+    repository = AsyncMock()
+    repository.create.return_value = job_stub()
+    service = JobService(repository=repository, queue=AsyncMock())
+    app = create_app()
+    app.dependency_overrides[get_current_user] = lambda: None
+    app.dependency_overrides[get_api_group_repository] = lambda: AsyncMock()
+    app.dependency_overrides[get_job_service] = lambda: service
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/jobs/hypothesis",
+            json={
+                "url": "https://www.walmart.com/ip/example/12345",
+                "bundle_plans_enabled": False,
+            },
+        )
+
+    assert response.status_code == 202
+    payload = repository.create.await_args.kwargs["request_payload"]
+    assert payload["bundle_plans_enabled"] is False
 
 
 @pytest.mark.asyncio

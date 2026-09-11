@@ -32,6 +32,10 @@ class BackendSettings(BaseSettings):
     auth_secret: str | None = None
     auth_token_ttl_seconds: int = 60 * 60 * 24 * 30
     admin_initial_password: str | None = None
+    # Allow the provider/API settings endpoints to be reached from remote
+    # clients (e.g. managing a server deployment from another machine).
+    # Default False keeps the original "localhost only" security posture.
+    allow_remote_settings: bool = False
 
 
 @lru_cache
