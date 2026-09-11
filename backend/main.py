@@ -25,10 +25,6 @@ async def _lifespan(_app: FastAPI):
     from backend.security.provider_crypto_factory import create_provider_crypto
 
     active_settings = get_backend_settings()
-    if active_settings.runtime_mode == "desktop":
-        from backend.application.job_recovery import recover_interrupted_jobs
-
-        await recover_interrupted_jobs(SessionFactory)
     async with SessionFactory() as session:
         service = ProviderService(
             repository=ProviderConfigurationRepository(session),
@@ -37,10 +33,9 @@ async def _lifespan(_app: FastAPI):
         )
         await service.import_legacy_env(legacy_settings)
 
-    if active_settings.runtime_mode == "server":
-        from backend.security.bootstrap import ensure_seed_admin
+    from backend.security.bootstrap import ensure_seed_admin
 
-        await ensure_seed_admin(SessionFactory, active_settings)
+    await ensure_seed_admin(SessionFactory, active_settings)
     yield
 
 
@@ -80,17 +75,9 @@ def create_app(settings: BackendSettings | None = None) -> FastAPI:
             "Content-Type",
             "Authorization",
             "X-Request-ID",
-            "X-Desktop-Session",
         ],
     )
     app.add_middleware(RequestIDMiddleware)
-    if active_settings.runtime_mode == "desktop":
-        from backend.security.desktop_session import DesktopSessionMiddleware
-
-        app.add_middleware(
-            DesktopSessionMiddleware,
-            token=active_settings.desktop_session_token or "",
-        )
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(

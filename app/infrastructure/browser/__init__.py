@@ -19,7 +19,6 @@ from app.core.config import settings
 from app.core.exceptions import BrowserError, BrowserTargetClosedError
 from app.core.logger import logger
 from app.domain.interfaces import BrowserManager as BrowserManagerInterface
-from backend.desktop.browser_paths import resolve_browser_candidates
 
 CDP_PORT = 9222
 CDP_HOST = "127.0.0.1"
@@ -113,73 +112,12 @@ class PlaywrightBrowserManager(BrowserManagerInterface):
         self._owns_chrome_process = False
         self._is_cdp = False
         self._reconnect_lock = asyncio.Lock()
-        self._selected_browser_kind: str | None = None
-        self._launch_attempts: list[dict[str, str]] = []
-        self._avoid_browser_kind_once: str | None = None
         self._headless = True
-
-    @property
-    def selected_browser_kind(self) -> str | None:
-        return self._selected_browser_kind
-
-    @property
-    def launch_attempts(self) -> list[dict[str, str]]:
-        return list(self._launch_attempts)
 
     async def start(self) -> None:
         self._playwright = await async_playwright().start()
 
-        if os.environ.get("RUNTIME_MODE") == "desktop":
-            self._launch_attempts = []
-            last_error: Exception | None = None
-            try:
-                candidates = resolve_browser_candidates()
-            except Exception:  # noqa: BLE001 - release Playwright before propagating
-                await self._playwright.stop()
-                self._playwright = None
-                raise
-            avoided = self._avoid_browser_kind_once
-            self._avoid_browser_kind_once = None
-            if avoided:
-                candidates = sorted(
-                    candidates,
-                    key=lambda candidate: candidate.kind == avoided,
-                )
-            for candidate in candidates:
-                browser = None
-                try:
-                    browser = await self._playwright.chromium.launch(
-                        executable_path=str(candidate.executable),
-                        headless=self._headless,
-                        args=["--no-sandbox"],
-                    )
-                    context = await browser.new_context()
-                except Exception as error:  # noqa: BLE001 - try the next installed browser
-                    last_error = error
-                    self._launch_attempts.append(
-                        {"browser": candidate.kind, "status": "failed"}
-                    )
-                    if browser is not None:
-                        try:
-                            await browser.close()
-                        except Exception as close_error:  # noqa: BLE001 - launch error wins
-                            logger.warning(
-                                "Browser cleanup failed after launch error: {}",
-                                type(close_error).__name__,
-                            )
-                    continue
-                self._browser = browser
-                self._context = context
-                self._selected_browser_kind = candidate.kind
-                self._launch_attempts.append(
-                    {"browser": candidate.kind, "status": "passed"}
-                )
-                break
-            if self._browser is None:
-                await self._playwright.stop()
-                self._playwright = None
-                raise BrowserError("DESKTOP_BROWSER_START_FAILED") from last_error
-        elif settings.browser_ws_endpoint:
+        if settings.browser_ws_endpoint:
             self._browser = await self._playwright.chromium.connect(
                 ws_endpoint=settings.browser_ws_endpoint,
             )
@@ -269,13 +207,11 @@ class PlaywrightBrowserManager(BrowserManagerInterface):
         self._playwright = None
         self._chrome_process = None
         self._owns_chrome_process = False
-        self._selected_browser_kind = None
 
         if errors and raise_errors:
             raise BrowserError(f"Failed to stop browser: {errors[0]}") from errors[0]
 
     async def restart(self) -> None:
-        self._avoid_browser_kind_once = self._selected_browser_kind
         await self.stop(raise_errors=False)
         await self.start()
 

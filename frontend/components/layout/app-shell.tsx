@@ -6,7 +6,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/auth-context";
 import Sidebar from "./sidebar";
 import MobileNav from "./mobile-nav";
-import DesktopPreflight from "./desktop-preflight";
 
 const STORAGE_KEY_IMAGE = "global-bg-image";
 const STORAGE_KEY_OPACITY = "global-bg-opacity";
@@ -97,7 +96,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
             <span className="text-sm font-semibold">组合选品控制台</span>
           </header>
           <main id="main-content" className="min-w-0 flex-1">
-            <DesktopPreflight />
             {children}
           </main>
         </div>
@@ -142,7 +140,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <span className="text-sm font-semibold">组合选品控制台</span>
         </header>
         <main id="main-content" className="min-w-0 flex-1">
-          <DesktopPreflight />
           {children}
         </main>
       </div>

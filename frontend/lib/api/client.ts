@@ -1,4 +1,3 @@
-import { getDesktopApiBase, getDesktopSessionToken } from "./desktop-session";
 import { clearStoredAuth, getStoredToken } from "../auth-storage";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
@@ -18,19 +17,14 @@ export class ApiError extends Error {
   }
 }
 
-/** Absolute URL (with /api/v1 prefix) for a backend path, honoring the desktop
- * base override when present, else NEXT_PUBLIC_API_BASE, else localhost:8000. */
-export async function buildApiUrl(path: string): Promise<string> {
-  const desktopBase = await getDesktopApiBase();
-  return `${desktopBase ?? BASE_URL}${API_PREFIX}${path}`;
+/** Absolute URL (with the /api/v1 prefix) for a backend path. */
+export function buildApiUrl(path: string): string {
+  return `${BASE_URL}${API_PREFIX}${path}`;
 }
 
-/** Auth headers every backend call should carry: desktop session token and the
- * Bearer login token (server mode). */
-export async function authHeaders(): Promise<Record<string, string>> {
+/** Auth headers every backend call should carry: the Bearer login token. */
+export function authHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
-  const desktopToken = await getDesktopSessionToken();
-  if (desktopToken) headers["X-Desktop-Session"] = desktopToken;
   const authToken = getStoredToken();
   if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
   return headers;
@@ -43,8 +37,8 @@ export async function apiFetch<T>(
   const timeoutMs = options?.timeoutMs ?? 15_000;
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   const timeoutError = new ApiError(
-    "DESKTOP_API_TIMEOUT",
-    "本地服务响应超时，请稍后重试；如持续出现，请打开日志目录。",
+    "API_TIMEOUT",
+    "服务响应超时，请稍后重试。",
     true,
     504
   );
@@ -66,9 +60,9 @@ async function performApiFetch<T>(
   path: string,
   options: { method?: string; body?: unknown; timeoutMs?: number } | undefined
 ): Promise<T> {
-  const url = await buildApiUrl(path);
+  const url = buildApiUrl(path);
   const method = options?.method ?? "GET";
-  const headers: Record<string, string> = await authHeaders();
+  const headers: Record<string, string> = authHeaders();
 
   let body: string | undefined;
   if (options?.body !== undefined) {

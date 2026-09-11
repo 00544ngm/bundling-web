@@ -5,7 +5,7 @@ from datetime import timezone
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from backend.db.models import AnalysisJob, JobModelAttempt, LocalQueueItem, utc_now
+from backend.db.models import AnalysisJob, JobModelAttempt, utc_now
 
 
 async def recover_interrupted_jobs(
@@ -45,11 +45,6 @@ async def recover_interrupted_jobs(
                 0,
                 int((finished_at - started_at).total_seconds() * 1000),
             )
-        await session.execute(
-            update(LocalQueueItem)
-            .where(LocalQueueItem.status == "running")
-            .values(status="interrupted")
-        )
         await session.commit()
         return int(jobs.rowcount or 0)
 

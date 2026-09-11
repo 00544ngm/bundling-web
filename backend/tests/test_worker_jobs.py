@@ -15,7 +15,6 @@ from app.core.exceptions import (
 )
 from backend.application.analysis_runner import RunnerResult
 from backend.config import BackendSettings
-from backend.security.windows_dpapi import WindowsDPAPI
 from backend.workers import jobs as worker_jobs
 
 
@@ -341,19 +340,6 @@ async def test_worker_reuses_scraped_products_for_all_analysis_modes(
     run_call = getattr(runner, runner_method).await_args.kwargs
     for key in expected_kwargs:
         assert key in run_call
-
-
-def test_desktop_worker_provider_resolver_uses_dpapi(tmp_path):
-    settings = BackendSettings(
-        runtime_mode="desktop",
-        database_url=f"sqlite+aiosqlite:///{tmp_path / 'desktop.db'}",
-        provider_key_file=tmp_path / "provider.key",
-    )
-
-    with patch("backend.config.get_backend_settings", return_value=settings):
-        resolver = worker_jobs._create_provider_resolver(AsyncMock())
-
-    assert isinstance(resolver._crypto, WindowsDPAPI)
 
 
 @pytest.mark.asyncio

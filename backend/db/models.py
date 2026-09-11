@@ -186,31 +186,6 @@ class ProviderConfiguration(Base):
     )
 
 
-class LocalQueueItem(Base):
-    __tablename__ = "local_queue_items"
-    __table_args__ = (Index("ix_local_queue_items_status_created", "status", "created_at"),)
-
-    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
-    function: Mapped[str] = mapped_column(String(64), nullable=False)
-    arguments: Mapped[list[str]] = mapped_column(JSON_TYPE, nullable=False)
-    status: Mapped[str] = mapped_column(String(24), default="queued", nullable=False)
-    attempts: Mapped[int] = mapped_column(default=0, nullable=False)
-    cancel_requested: Mapped[bool] = mapped_column(default=False, nullable=False)
-    claimed_by: Mapped[str | None] = mapped_column(String(120))
-    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utc_now, nullable=False
-    )
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-    def __init__(self, **kwargs: Any) -> None:
-        kwargs.setdefault("status", "queued")
-        kwargs.setdefault("attempts", 0)
-        kwargs.setdefault("cancel_requested", False)
-        super().__init__(**kwargs)
-
-
 class ProviderModelValidation(Base):
     __tablename__ = "provider_model_validations"
     __table_args__ = (
@@ -416,10 +391,11 @@ class User(Base):
 __all__ = [
     "AnalysisJob",
     "ApiGroup",
+    "ApiGroupProvider",
+    "ApiGroupProviderModelValidation",
     "Artifact",
     "JobModelAttempt",
     "JobProduct",
-    "LocalQueueItem",
     "ProductSnapshot",
     "ProviderConfiguration",
     "ProviderModelValidation",

@@ -27,7 +27,7 @@ it("tells another Windows user to re-enter an undecryptable API key", () => {
   expect(screen.getByText(/重新输入 API Key/)).toBeInTheDocument();
 });
 
-it("offers recovery and diagnostics for a closed packaged browser", () => {
+it("offers recovery for a closed browser", () => {
   render(
     <JobError
       errorCode="BROWSER_TARGET_CLOSED"
@@ -38,9 +38,6 @@ it("offers recovery and diagnostics for a closed packaged browser", () => {
 
   expect(screen.getByText("商品浏览器已意外关闭")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "自动修复后重试" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "运行环境检查" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "打开日志目录" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "打开 Windows 安全中心" })).toBeInTheDocument();
 });
 
 it.each([

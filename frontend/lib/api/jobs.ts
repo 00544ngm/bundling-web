@@ -69,8 +69,8 @@ export async function getJobResult(jobId: string): Promise<Record<string, unknow
 }
 
 export async function downloadArtifact(jobId: string, kind: string): Promise<Blob> {
-  const url = await buildApiUrl(`/jobs/${jobId}/artifacts/${kind}`);
-  const response = await fetch(url, { headers: await authHeaders() });
+  const url = buildApiUrl(`/jobs/${jobId}/artifacts/${kind}`);
+  const response = await fetch(url, { headers: authHeaders() });
   if (!response.ok) {
     let code = "ARTIFACT_DOWNLOAD_FAILED";
     let message = `下载 ${kind} 产物失败（HTTP ${response.status}）`;

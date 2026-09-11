@@ -3,19 +3,30 @@ from __future__ import annotations
 import pytest
 
 from backend.application.job_recovery import recover_interrupted_jobs
+from backend.db.base import Base
 from backend.db.engine import create_database_engine
 from backend.db.models import AnalysisJob, JobModelAttempt
 from backend.db.session import create_session_factory
-from backend.desktop.migrations import upgrade_database_async
+
+
+async def _sqlite_factory(tmp_path, name: str):
+    """Build a throwaway SQLite database with the full schema applied.
+
+    This fixture used to be created through the desktop-mode programmatic
+    migration entry point. That entry point went away with the desktop runtime,
+    so the schema now comes straight from the ORM metadata — which is exactly
+    what the migrations build, so the assertions below are unchanged.
+    """
+    url = f"sqlite+aiosqlite:///{(tmp_path / name).as_posix()}"
+    engine = create_database_engine(url)
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    return engine, create_session_factory(engine)
 
 
 @pytest.mark.asyncio
 async def test_startup_marks_running_job_interrupted_without_touching_completed(tmp_path) -> None:
-    database = tmp_path / "recovery.db"
-    url = f"sqlite+aiosqlite:///{database.as_posix()}"
-    await upgrade_database_async(url)
-    engine = create_database_engine(url)
-    factory = create_session_factory(engine)
+    engine, factory = await _sqlite_factory(tmp_path, "recovery.db")
     try:
         async with factory() as session:
             running = AnalysisJob(mode="hypothesis", status="running", request_payload={})
@@ -40,11 +51,7 @@ async def test_startup_marks_running_job_interrupted_without_touching_completed(
 
 @pytest.mark.asyncio
 async def test_startup_closes_running_model_attempt(tmp_path) -> None:
-    database = tmp_path / "recovery-attempt.db"
-    url = f"sqlite+aiosqlite:///{database.as_posix()}"
-    await upgrade_database_async(url)
-    engine = create_database_engine(url)
-    factory = create_session_factory(engine)
+    engine, factory = await _sqlite_factory(tmp_path, "recovery-attempt.db")
     try:
         async with factory() as session:
             job = AnalysisJob(

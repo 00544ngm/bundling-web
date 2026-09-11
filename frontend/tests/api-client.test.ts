@@ -69,7 +69,7 @@ it("apiFetch throws ApiError with decoded detail", async () => {
   }
 });
 
-it("apiFetch aborts a hung desktop request and returns a stable timeout error", async () => {
+it("apiFetch aborts a hung request and returns a stable timeout error", async () => {
   const originalFetch = globalThis.fetch;
   vi.stubGlobal("fetch", (_url: string, init?: RequestInit) =>
     new Promise((_resolve, reject) => {
@@ -80,7 +80,7 @@ it("apiFetch aborts a hung desktop request and returns a stable timeout error", 
   );
 
   await expect(apiFetch("/hung", { timeoutMs: 10 })).rejects.toMatchObject({
-    code: "DESKTOP_API_TIMEOUT",
+    code: "API_TIMEOUT",
     retryable: true,
     status: 504,
   });

@@ -1,9 +1,8 @@
-"""Server-mode login gate on job/search routes.
+"""Login gate on job/search routes.
 
-/jobs* and /search are data + task-authoring surface. In server (web) mode they
-must require a valid login; in desktop mode get_current_user short-circuits to
-None so the single-user desktop app is unchanged (its jobs stay gated by the
-desktop-session token middleware instead).
+/jobs* and /search are data + task-authoring surface, so they must require a
+valid login. Requests without a usable Bearer token are rejected before any
+repository work happens.
 """
 from __future__ import annotations
 

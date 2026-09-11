@@ -89,13 +89,11 @@ async def get_current_user(
 ) -> User | None:
     """Resolve the logged-in user from a Bearer token.
 
-    Desktop (single-user local) mode has no login: returns ``None`` so callers
-    may treat the local operator as unrestricted.
+    Raises 401 ``AUTH_REQUIRED`` when no token is presented, 503
+    ``AUTH_NOT_CONFIGURED`` when the server has no ``AUTH_SECRET``, and 401
+    ``AUTH_INVALID`` for a token that is expired, forged, or points at a user
+    that no longer exists. A disabled account gets 403 ``ACCOUNT_DISABLED``.
     """
-    settings = get_backend_settings()
-    if settings.runtime_mode == "desktop":
-        return None
-
     token = bearer_token(request)
     if not token:
         raise _http_error(status.HTTP_401_UNAUTHORIZED, "AUTH_REQUIRED", "未登录")
@@ -137,8 +135,8 @@ async def get_current_user(
 async def require_admin(
     user: User | None = Depends(get_current_user),
 ) -> User | None:
-    if user is None:
-        return None  # desktop single-user mode
+    if user is None:  # pragma: no cover - get_current_user raises before this
+        raise _http_error(status.HTTP_401_UNAUTHORIZED, "AUTH_REQUIRED", "未登录")
     if user.role != "admin":
         raise _http_error(
             status.HTTP_403_FORBIDDEN, "ADMIN_ONLY", "仅管理员可执行此操作"

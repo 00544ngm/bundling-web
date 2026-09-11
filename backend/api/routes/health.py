@@ -2,9 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
-from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -37,8 +34,6 @@ async def check_redis(timeout: float = 2.0) -> str:
     from arq.connections import RedisSettings
 
     settings = get_backend_settings()
-    if settings.runtime_mode == "desktop":
-        return "ok"
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
     try:
         async with asyncio.timeout(timeout):
@@ -57,16 +52,6 @@ async def check_worker(timeout: float = 2.0) -> str:
     from arq.connections import RedisSettings
 
     settings = get_backend_settings()
-    if settings.runtime_mode == "desktop":
-        identity = await check_worker_identity(timeout)
-        if not identity:
-            return "unavailable"
-        try:
-            heartbeat = datetime.fromisoformat(str(identity["heartbeat_at"]))
-        except (KeyError, TypeError, ValueError):
-            return "unavailable"
-        age = datetime.now(timezone.utc) - heartbeat.astimezone(timezone.utc)
-        return "ok" if age.total_seconds() <= 15 else "unavailable"
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
     try:
         async with asyncio.timeout(timeout):
@@ -85,13 +70,6 @@ async def check_worker_identity(timeout: float = 2.0) -> dict[str, Any] | None:
     from arq.connections import RedisSettings
 
     settings = get_backend_settings()
-    if settings.runtime_mode == "desktop":
-        from backend.desktop.paths import DesktopPaths
-        from backend.workers.local_identity import read_local_worker_identity
-
-        return read_local_worker_identity(
-            DesktopPaths.for_current_user().worker_heartbeat_file
-        )
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
     try:
         async with asyncio.timeout(timeout):
@@ -109,27 +87,6 @@ async def check_worker_identity(timeout: float = 2.0) -> dict[str, Any] | None:
         return None
 
 
-async def check_desktop_runtime() -> str:
-    settings = get_backend_settings()
-    if settings.runtime_mode != "desktop":
-        return "ok"
-    probe: Path | None = None
-    try:
-        from backend.desktop.browser_paths import resolve_browser_candidates
-
-        artifact_dir = settings.artifact_dir.resolve()
-        artifact_dir.mkdir(parents=True, exist_ok=True)
-        probe = artifact_dir / f".write-probe-{os.getpid()}"
-        probe.write_text("ok", encoding="utf-8")
-        resolve_browser_candidates()
-        return "ok"
-    except Exception:  # noqa: BLE001 - readiness must not expose local paths
-        return "unavailable"
-    finally:
-        if probe is not None:
-            probe.unlink(missing_ok=True)
-
-
 @router.get("/live")
 async def liveness() -> dict[str, str]:
     return {"status": "ok"}
@@ -141,7 +98,6 @@ async def readiness(
     redis: str = Depends(check_redis),
     worker: str = Depends(check_worker),
     worker_identity: dict[str, Any] | None = Depends(check_worker_identity),
-    runtime: str = Depends(check_desktop_runtime),
 ) -> dict[str, str] | JSONResponse:
     api_version = EXPECTED_COMBINATION_MODEL_VERSION
     api_revision = runtime_revision()
@@ -166,19 +122,17 @@ async def readiness(
     else:
         contract_match = "ok"
 
-    dependency_name = "queue" if get_backend_settings().runtime_mode == "desktop" else "redis"
     payload = {
         "database": database,
-        dependency_name: redis,
+        "redis": redis,
         "worker": worker,
         "api_model_version": api_version,
         "worker_model_version": worker_version,
         "api_revision": api_revision,
         "worker_revision": worker_revision,
         "contract_match": contract_match,
-        "runtime": runtime,
     }
-    if any(value != "ok" for value in (database, redis, worker, contract_match, runtime)):
+    if any(value != "ok" for value in (database, redis, worker, contract_match)):
         return JSONResponse(status_code=503, content=payload)
     return payload
 

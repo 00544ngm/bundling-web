@@ -5,12 +5,10 @@ from httpx import ASGITransport, AsyncClient
 
 from backend.api.routes.health import (
     check_database,
-    check_desktop_runtime,
     check_redis,
     check_worker,
     check_worker_identity,
 )
-from backend.config import get_backend_settings
 from backend.main import create_app
 
 
@@ -74,12 +72,11 @@ async def test_liveness_still_works(app):
     assert response.json() == {"status": "ok"}
 
 
-async def _ready_response(app, *, identity, database="ok", redis="ok", worker="ok", runtime="ok"):
+async def _ready_response(app, *, identity, database="ok", redis="ok", worker="ok"):
     app.dependency_overrides[check_database] = lambda: database
     app.dependency_overrides[check_redis] = lambda: redis
     app.dependency_overrides[check_worker] = lambda: worker
     app.dependency_overrides[check_worker_identity] = lambda: identity
-    app.dependency_overrides[check_desktop_runtime] = lambda: runtime
     try:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -152,61 +149,6 @@ async def test_readiness_allows_unknown_revision_when_versions_match(app, monkey
     assert response.status_code == 200
     assert response.json()["contract_match"] == "ok"
     assert response.json()["api_revision"] == "unknown"
-
-
-@pytest.mark.asyncio
-async def test_desktop_readiness_reports_queue_without_redis(app, monkeypatch):
-    monkeypatch.setenv("RUNTIME_MODE", "desktop")
-    get_backend_settings.cache_clear()
-    try:
-        response = await _ready_response(
-            app,
-            identity={
-                "model_version": "combination_model_v2.1",
-                "revision": "unknown",
-            },
-        )
-    finally:
-        get_backend_settings.cache_clear()
-
-    assert response.status_code == 200
-    assert response.json()["queue"] == "ok"
-    assert "redis" not in response.json()
-
-
-@pytest.mark.asyncio
-async def test_desktop_runtime_probe_rejects_missing_packaged_browser(monkeypatch, tmp_path):
-    monkeypatch.setenv("RUNTIME_MODE", "desktop")
-    monkeypatch.setenv("ARTIFACT_DIR", str(tmp_path / "员工 #100%" / "artifacts"))
-    monkeypatch.setenv("DESKTOP_BROWSER_EXECUTABLE", str(tmp_path / "missing.exe"))
-    monkeypatch.setattr(
-        "backend.desktop.browser_paths._default_edge_paths", list
-    )
-    get_backend_settings.cache_clear()
-    try:
-        assert await check_desktop_runtime() == "unavailable"
-    finally:
-        get_backend_settings.cache_clear()
-
-
-@pytest.mark.asyncio
-async def test_desktop_runtime_accepts_edge_when_bundled_browser_is_missing(
-    monkeypatch, tmp_path
-):
-    edge = tmp_path / "Microsoft" / "Edge" / "Application" / "msedge.exe"
-    edge.parent.mkdir(parents=True)
-    edge.touch()
-    monkeypatch.setenv("RUNTIME_MODE", "desktop")
-    monkeypatch.setenv("ARTIFACT_DIR", str(tmp_path / "employee" / "artifacts"))
-    monkeypatch.setenv("DESKTOP_BROWSER_EXECUTABLE", str(tmp_path / "missing.exe"))
-    monkeypatch.setenv("PROGRAMFILES(X86)", str(tmp_path))
-    monkeypatch.delenv("PROGRAMFILES", raising=False)
-    monkeypatch.delenv("LOCALAPPDATA", raising=False)
-    get_backend_settings.cache_clear()
-    try:
-        assert await check_desktop_runtime() == "ok"
-    finally:
-        get_backend_settings.cache_clear()
 
 
 @pytest.mark.asyncio

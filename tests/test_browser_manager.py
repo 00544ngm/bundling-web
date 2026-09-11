@@ -11,7 +11,6 @@ from app.infrastructure.browser import (
     PlaywrightBrowserManager,
     build_chrome_launch_args,
 )
-from backend.desktop.browser_paths import BrowserCandidate
 
 
 def test_chrome_launch_args_do_not_disable_security_boundaries(tmp_path):
@@ -83,125 +82,20 @@ async def test_restart_suppresses_stale_cleanup_error_and_starts_fresh_browser()
 
 
 @pytest.mark.asyncio
-async def test_desktop_start_falls_back_from_edge_to_bundled_chromium(monkeypatch):
-    monkeypatch.setenv("RUNTIME_MODE", "desktop")
-    bundled_browser = AsyncMock()
-    bundled_browser.new_context = AsyncMock(return_value=AsyncMock())
-    chromium = Mock()
-    chromium.launch = AsyncMock(
-        side_effect=[RuntimeError("edge terminated"), bundled_browser]
-    )
-    playwright = SimpleNamespace(chromium=chromium)
+async def test_restart_visible_relaunches_browser_in_headful_mode():
     manager = PlaywrightBrowserManager()
-
-    with (
-        patch("app.infrastructure.browser.async_playwright") as async_playwright,
-        patch(
-            "app.infrastructure.browser.resolve_browser_candidates",
-            return_value=[
-                BrowserCandidate("edge", Path("C:/Edge/msedge.exe")),
-                BrowserCandidate(
-                    "bundled_chromium", Path("C:/App/browser/chrome.exe")
-                ),
-            ],
-        ),
-    ):
-        async_playwright.return_value.start = AsyncMock(return_value=playwright)
-        await manager.start()
-
-    assert chromium.launch.await_count == 2
-    assert manager.selected_browser_kind == "bundled_chromium"
-
-
-@pytest.mark.asyncio
-async def test_desktop_start_falls_back_when_failed_edge_cleanup_also_fails(monkeypatch):
-    monkeypatch.setenv("RUNTIME_MODE", "desktop")
-    failed_edge = AsyncMock()
-    failed_edge.new_context.side_effect = RuntimeError("edge context terminated")
-    failed_edge.close.side_effect = RuntimeError("edge already closed")
-    bundled_browser = AsyncMock()
-    bundled_browser.new_context = AsyncMock(return_value=AsyncMock())
-    chromium = Mock()
-    chromium.launch = AsyncMock(side_effect=[failed_edge, bundled_browser])
-    playwright = SimpleNamespace(chromium=chromium)
-    manager = PlaywrightBrowserManager()
-
-    with (
-        patch("app.infrastructure.browser.async_playwright") as async_playwright,
-        patch(
-            "app.infrastructure.browser.resolve_browser_candidates",
-            return_value=[
-                BrowserCandidate("edge", Path("C:/Edge/msedge.exe")),
-                BrowserCandidate(
-                    "bundled_chromium", Path("C:/App/browser/chrome.exe")
-                ),
-            ],
-        ),
-    ):
-        async_playwright.return_value.start = AsyncMock(return_value=playwright)
-        await manager.start()
-
-    assert chromium.launch.await_count == 2
-    assert manager.selected_browser_kind == "bundled_chromium"
-
-
-@pytest.mark.asyncio
-async def test_desktop_start_stops_playwright_when_no_browser_candidate(monkeypatch):
-    monkeypatch.setenv("RUNTIME_MODE", "desktop")
-    playwright = SimpleNamespace(chromium=Mock(), stop=AsyncMock())
-    manager = PlaywrightBrowserManager()
-
-    with (
-        patch("app.infrastructure.browser.async_playwright") as async_playwright,
-        patch(
-            "app.infrastructure.browser.resolve_browser_candidates",
-            side_effect=RuntimeError("DESKTOP_BROWSER_MISSING"),
-        ),
-    ):
-        async_playwright.return_value.start = AsyncMock(return_value=playwright)
-        with pytest.raises(RuntimeError, match="DESKTOP_BROWSER_MISSING"):
-            await manager.start()
-
-    playwright.stop.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_restart_prefers_bundled_after_running_edge_closes(monkeypatch):
-    monkeypatch.setenv("RUNTIME_MODE", "desktop")
-    manager = PlaywrightBrowserManager()
-    manager._selected_browser_kind = "edge"
+    manager._headless = True
     manager.stop = AsyncMock()
-    manager.start = AsyncMock()
-
-    await manager.restart()
-
-    assert manager._avoid_browser_kind_once == "edge"
-    manager.stop.assert_awaited_once_with(raise_errors=False)
-    manager.start.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_restart_visible_relaunches_browser_in_headful_mode(monkeypatch):
-    monkeypatch.setenv("RUNTIME_MODE", "desktop")
-    bundled_browser = AsyncMock()
-    bundled_browser.new_context = AsyncMock(return_value=AsyncMock())
-    chromium = Mock()
-    chromium.launch = AsyncMock(return_value=bundled_browser)
-    playwright = SimpleNamespace(chromium=chromium)
-    manager = PlaywrightBrowserManager()
+    manager._start_cdp = AsyncMock()
+    playwright = SimpleNamespace(chromium=Mock(), stop=AsyncMock())
 
     with (
         patch("app.infrastructure.browser.async_playwright") as async_playwright,
-        patch(
-            "app.infrastructure.browser.resolve_browser_candidates",
-            return_value=[
-                BrowserCandidate(
-                    "bundled_chromium", Path("C:/App/browser/chrome.exe")
-                )
-            ],
-        ),
+        patch("app.infrastructure.browser.settings") as settings,
     ):
+        settings.browser_ws_endpoint = ""
         async_playwright.return_value.start = AsyncMock(return_value=playwright)
         await manager.restart_visible()
 
-    assert chromium.launch.await_args.kwargs["headless"] is False
+    assert manager._headless is False
+    manager._start_cdp.assert_awaited_once()

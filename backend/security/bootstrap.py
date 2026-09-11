@@ -12,15 +12,12 @@ logger = logging.getLogger("backend")
 
 
 async def ensure_seed_admin(session_factory, settings) -> None:
-    """Create a first admin account when none exists (web/server mode only).
+    """Create a first admin account when none exists.
 
     The initial password comes from ``ADMIN_INITIAL_PASSWORD``; if unset, a
     random one is generated and logged once so the operator can log in and
     immediately change it.
     """
-    if settings.runtime_mode == "desktop":
-        return
-
     async with session_factory() as session:
         result = await session.execute(
             select(User).where(User.role == "admin").limit(1)

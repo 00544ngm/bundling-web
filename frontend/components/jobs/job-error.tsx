@@ -1,9 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { FolderOpen, RotateCcw, ShieldCheck, Stethoscope } from "lucide-react";
-
-import { apiFetch } from "@/lib/api/client";
+import { RotateCcw } from "lucide-react";
 
 interface JobErrorProps {
   errorCode: string;
@@ -132,31 +129,6 @@ export default function JobError({
   ]).has(errorCode.trim().toLowerCase());
   const technicalMessage = stableWalmartError ? "" : errorMessage;
   const browserFailure = normalized.includes("browser_target_closed") || normalized.includes("targetclosed");
-  const [diagnostics, setDiagnostics] = useState<Record<string, { status: string; summary: string }> | null>(null);
-  const [diagnosticError, setDiagnosticError] = useState("");
-  const [checking, setChecking] = useState(false);
-
-  async function runDiagnostics() {
-    setChecking(true);
-    setDiagnosticError("");
-    try {
-      const result = await apiFetch<{ checks: Record<string, { status: string; summary: string }> }>("/desktop/diagnostics", { timeoutMs: 30_000 });
-      setDiagnostics(result.checks);
-    } catch (error) {
-      setDiagnosticError(error instanceof Error ? error.message : "环境检查失败，请打开日志目录");
-    } finally {
-      setChecking(false);
-    }
-  }
-
-  async function openDesktopAction(action: "logs" | "security") {
-    if (!window.desktop) {
-      setDiagnosticError("当前不是桌面安装版，请在员工电脑的安装版中执行此操作。");
-      return;
-    }
-    if (action === "logs") await window.desktop.openLogDirectory();
-    else await window.desktop.openWindowsSecurity();
-  }
   return (
     <div className="space-y-3 rounded-md border border-destructive/30 bg-destructive/5 p-4">
       <div className="space-y-1">
@@ -168,23 +140,6 @@ export default function JobError({
           <p className="mt-1 break-words">错误代码：{errorCode}</p>
         </details>
       </div>
-      {browserFailure && (
-        <div className="space-y-2 rounded-md border bg-background/60 p-3">
-          <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={runDiagnostics} disabled={checking} className="inline-flex items-center gap-2 border px-3 py-2 text-sm disabled:opacity-50">
-              <Stethoscope className="h-4 w-4" />{checking ? "检查中..." : "运行环境检查"}
-            </button>
-            <button type="button" onClick={() => openDesktopAction("logs")} className="inline-flex items-center gap-2 border px-3 py-2 text-sm">
-              <FolderOpen className="h-4 w-4" />打开日志目录
-            </button>
-            <button type="button" onClick={() => openDesktopAction("security")} className="inline-flex items-center gap-2 border px-3 py-2 text-sm">
-              <ShieldCheck className="h-4 w-4" />打开 Windows 安全中心
-            </button>
-          </div>
-          {diagnostics && <ul className="space-y-1 text-xs">{Object.entries(diagnostics).map(([key, check]) => <li key={key}><strong>{check.status === "passed" ? "通过" : check.status === "failed" ? "失败" : "需人工确认"}：</strong>{check.summary}</li>)}</ul>}
-          {diagnosticError && <p className="text-xs text-destructive">{diagnosticError}</p>}
-        </div>
-      )}
       {onRetry && (
         <button
           type="button"
