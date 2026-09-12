@@ -24,14 +24,15 @@ VALID_URL = "https://www.walmart.com/ip/example/12345"
 
 
 def test_task_provider_type_is_limited_to_primary_provider_slots():
-    # 合并说明（2026-09-11）：项目B 为任务提交新增了 claude 槽位
-    # （ProviderSlug / provider_service 的 PROVIDER_SLOTS 均含 claude，
-    # api_protocol="anthropic"）。项目A 无该槽位，此处随合并版保留 B 的取值，
+    # 这里必须与 PROVIDER_SLOTS 中 role="primary" 的槽位保持一致，
     # 否则前后端类型与提交校验会不一致。
+    # 2026-09-12 新增智谱（zhipu）与 Kimi，两者都是 OpenAI 兼容的 primary 槽位。
     assert get_args(job_schemas.TaskProvider) == (
         "openai",
         "custom",
         "claude",
+        "zhipu",
+        "kimi",
     )
 
 

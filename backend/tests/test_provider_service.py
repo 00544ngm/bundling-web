@@ -224,6 +224,8 @@ async def test_list_public_omits_retired_cattoken_slots_and_masks_saved_key(tmp_
         "deepseek",
         "custom",
         "claude",
+        "zhipu",
+        "kimi",
     ]
     assert result[0].configured is True
     assert result[0].masked_api_key == "••••4F2A"
@@ -247,7 +249,14 @@ async def test_list_public_ignores_saved_retired_cattoken_records(tmp_path):
 
     result = await service.list_public()
 
-    assert [item.slug for item in result] == ["openai", "deepseek", "custom", "claude"]
+    assert [item.slug for item in result] == [
+        "openai",
+        "deepseek",
+        "custom",
+        "claude",
+        "zhipu",
+        "kimi",
+    ]
 
 
 @pytest.mark.asyncio

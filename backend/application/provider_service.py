@@ -56,8 +56,30 @@ PROVIDER_SLOTS: dict[str, ProviderSlot] = {
         "anthropic",
         "Claude",
         "primary",
-        "https://maike-ai.top",
+        # 原来是 https://maike-ai.top（项目B 时期的第三方中转，已弃用）。
+        # 改回官方地址，没配置就是「未配置」，不再默认指向任何中转站。
+        "https://api.anthropic.com",
         "claude-opus-5",
+    ),
+    # 以下两家都是 OpenAI 兼容接口，provider_type 与 deepseek 同属
+    # openai_compatible —— 只需给出正确的 base_url 与默认模型。
+    "zhipu": ProviderSlot(
+        "openai_compatible",
+        "openai",
+        "智谱",
+        "primary",
+        # 注意不是站点根：智谱的 OpenAI 兼容接口在 /api/paas/v4 下，
+        # SDK 会在其后拼 /chat/completions。
+        "https://open.bigmodel.cn/api/paas/v4",
+        "glm-5.3",
+    ),
+    "kimi": ProviderSlot(
+        "openai_compatible",
+        "openai",
+        "Kimi",
+        "primary",
+        "https://api.moonshot.cn/v1",
+        "kimi-k2.6",
     ),
 }
 

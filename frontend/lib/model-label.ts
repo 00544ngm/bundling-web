@@ -5,6 +5,8 @@ const PROVIDER_LABELS: Record<string, string> = {
   custom: "自定义 API",
   deepseek: "DeepSeek",
   claude: "Claude",
+  zhipu: "智谱",
+  kimi: "Kimi",
 };
 
 export function providerModelLabel(provider: string, model: string) {

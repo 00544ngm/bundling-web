@@ -505,7 +505,7 @@ export interface SearchResponse {
   results: SearchProduct[];
 }
 
-export type ProviderSlug = "openai" | "deepseek" | "custom" | "claude";
+export type ProviderSlug = "openai" | "deepseek" | "custom" | "claude" | "zhipu" | "kimi";
 export type ProviderRole = "primary" | "secondary";
 export type ProviderApiProtocol = "openai" | "anthropic";
 export type ProviderModelTestStatus =

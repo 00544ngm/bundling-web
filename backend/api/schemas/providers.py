@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, SecretStr, model_validator
 
-ProviderSlug = Literal["openai", "deepseek", "custom", "claude"]
+ProviderSlug = Literal["openai", "deepseek", "custom", "claude", "zhipu", "kimi"]
 ProviderApiProtocol = Literal["openai", "anthropic"]
 ProviderRole = Literal["primary", "secondary"]
 ProviderTestStatus = Literal["untested", "success", "failed"]
