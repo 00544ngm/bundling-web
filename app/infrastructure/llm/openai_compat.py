@@ -6,6 +6,7 @@ from urllib.parse import urlsplit, urlunsplit
 from openai import APIConnectionError, APITimeoutError
 
 from app.core.exceptions import LLMError
+from app.infrastructure.llm.quota import is_quota_exhausted
 
 OpenAITransportMode = Literal["chat_completions", "responses"]
 OpenAIStructuredOutputMode = Literal["json_schema", "json_object", "prompt_json"]
@@ -102,6 +103,14 @@ def classify_openai_compatible_error(error: Exception) -> OpenAICompatibleLLMErr
         code, message, retryable = (
             "PROVIDER_REQUEST_TOO_LARGE",
             "The OpenAI-compatible request is too large",
+            False,
+        )
+    elif status_code == 429 and is_quota_exhausted(error):
+        # 额度耗尽也走 429，但它不是限流：不充值就永远不会成功，所以不可重试
+        # （与 PROVIDER_AUTH_FAILED 同属账户级错误）。
+        code, message, retryable = (
+            "PROVIDER_QUOTA_EXHAUSTED",
+            "The provider account has no remaining quota; add credits and retry",
             False,
         )
     elif status_code == 429:

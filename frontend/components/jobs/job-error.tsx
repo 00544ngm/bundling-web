@@ -36,6 +36,10 @@ function explainProviderFailure(errorCode: string, errorMessage: string) {
       title: "请求内容超过服务限制",
       action: "当前第三方服务无法接收本次完整报告请求，请联系服务商提高请求限制。",
     },
+    provider_quota_exhausted: {
+      title: "供应商账户额度已用尽",
+      action: "这不是限流，等待不会有改善。请为该供应商账户充值后重试。",
+    },
     provider_rate_limited: {
       title: "模型服务正在限流",
       action: "请稍后重试；开启模型轮换时，系统会按已验证顺序尝试下一个模型。",

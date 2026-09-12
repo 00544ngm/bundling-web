@@ -2,6 +2,21 @@ import { expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import JobError from "@/components/jobs/job-error";
 
+it("tells the user to add credits when the provider quota is exhausted", () => {
+  // 额度耗尽和限流都是 429，但处置完全相反 —— 提示必须说清「等待无效」，
+  // 否则用户会以为是暂时限流而一直重试。
+  render(
+    <JobError
+      errorCode="PROVIDER_QUOTA_EXHAUSTED"
+      errorMessage="The provider account has no remaining quota"
+    />
+  );
+
+  expect(screen.getByText("供应商账户额度已用尽")).toBeInTheDocument();
+  expect(screen.getByText(/这不是限流，等待不会有改善/)).toBeInTheDocument();
+  expect(screen.getByText(/充值/)).toBeInTheDocument();
+});
+
 it("explains an upstream account-group routing failure in Chinese", () => {
   render(
     <JobError

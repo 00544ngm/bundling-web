@@ -14,6 +14,7 @@ from anthropic import AsyncAnthropic
 from app.core.config import settings
 from app.core.exceptions import LLMError
 from app.domain.interfaces import LLMClient as LLMClientInterface
+from app.infrastructure.llm.quota import is_quota_exhausted
 
 
 class AnthropicLLMError(LLMError):
@@ -91,6 +92,15 @@ def _classify_anthropic_error(error: Exception) -> AnthropicLLMError:
 
     status_code = getattr(error, "status_code", None)
     retry_after = _retry_after_seconds(error)
+    if status_code == 429 and is_quota_exhausted(error):
+        # 额度耗尽也走 429，但不可重试 —— 见 app/infrastructure/llm/quota.py。
+        return AnthropicLLMError(
+            code="PROVIDER_QUOTA_EXHAUSTED",
+            message="The provider account has no remaining quota; add credits and retry",
+            retryable=False,
+            status_code=status_code,
+            retry_after=retry_after,
+        )
     status_errors: dict[int, tuple[str, str, bool]] = {
         400: (
             "PROVIDER_PROTOCOL_MISMATCH",

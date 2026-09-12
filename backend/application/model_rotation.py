@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.core.exceptions import BrowserError, BrowserTargetClosedError, ScrapeError
+from app.infrastructure.llm.quota import is_quota_exhausted
 from backend.application.result_quality import ResultQualityError
 
 
@@ -83,6 +84,15 @@ def _provider_error(error: BaseException) -> RotationFailure | None:
             "模型返回的结构化 JSON 不完整或无效",
             True,
         )
+    if code == "PROVIDER_QUOTA_EXHAUSTED":
+        # 账户级问题，不可重试 —— 与 PROVIDER_AUTH_FAILED 同一类：换个模型也没用，
+        # 因为整条供应商账户都没额度了。
+        return RotationFailure(
+            "MODEL_QUOTA_EXHAUSTED",
+            "request",
+            "供应商账户额度已用尽，请充值后重试",
+            False,
+        )
     if code == "PROVIDER_RATE_LIMITED":
         return RotationFailure("MODEL_RATE_LIMITED", "request", "模型请求受到限流", True)
     if code == "PROVIDER_UPSTREAM_UNAVAILABLE":
@@ -148,6 +158,14 @@ def classify_rotation_failure(
     if isinstance(error, asyncio.TimeoutError) or "timeout" in text:
         return RotationFailure("MODEL_TIMEOUT", stage, "模型请求超时", True)
     if status_code == 429 or "rate" in text and "limit" in text:
+        # 兜底路径也要分：429 既可能是限流，也可能是账户额度耗尽。
+        if is_quota_exhausted(error):
+            return RotationFailure(
+                "MODEL_QUOTA_EXHAUSTED",
+                stage,
+                "供应商账户额度已用尽，请充值后重试",
+                False,
+            )
         return RotationFailure("MODEL_RATE_LIMITED", stage, "模型请求受到限流", True)
     if (
         isinstance(status_code, int) and status_code >= 500
