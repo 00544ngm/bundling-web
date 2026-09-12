@@ -39,7 +39,8 @@ SQL
 
 ```bash
 sudo mkdir -p /opt && sudo chown $USER /opt
-git clone https://github.com/00544ngm/bundling-web-platform.git /opt/bundling
+# 私有仓库，需要凭据（deploy key 或 PAT）。见文末「拉私有仓库」一节。
+git clone git@github.com:00544ngm/bundling-web.git /opt/bundling
 cd /opt/bundling
 ```
 
@@ -63,7 +64,6 @@ nano backend/.env
 ```bash
 DATABASE_URL=postgresql+asyncpg://bundling:bundling@127.0.0.1:5432/bundling
 REDIS_URL=redis://127.0.0.1:6379/0
-RUNTIME_MODE=server
 
 # 浏览器访问用的源（用 服务器IP:3000 或域名访问前端时必须包含该源，否则 CORS 拦）
 CORS_ORIGINS=["http://服务器IP:3000","http://localhost:3000"]
@@ -72,8 +72,19 @@ CORS_ORIGINS=["http://服务器IP:3000","http://localhost:3000"]
 # 服务器部署、要从别处浏览器改 API 设置时设 true。改后需重启 bundling-api。
 ALLOW_REMOTE_SETTINGS=true
 
-# Provider 密钥加密（Fernet）。留空则后端自动生成 backend/.api-config.key
-# 请把 backend/.api-config.key 与 PostgreSQL 数据一起备份，丢了就无法解库里存的 Key。
+# Provider 密钥加密（Fernet）。
+#
+# 【强烈建议】在这里写死一个固定值，而不是留空。生成方法：
+#   .venv/bin/python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+#
+# 为什么不能留空：留空时后端会自动生成 backend/.api-config.key，而该路径是
+# **相对进程工作目录**的 —— 换个目录启动就会在那边生成一把新密钥，此后库里
+# 所有 provider 的 Key 全部解不开，且不会报错，直到某次跑任务才炸。本项目
+# 已经因为这个踩过一次坑（所有 provider 的 Key 一次性全部失效）。
+# 写死在这里就彻底摆脱了对「当前目录」的依赖。
+#
+# 【务必备份这个值】连同 PostgreSQL 数据一起。丢了 = 库里所有 provider 的
+# Key（含各接口分组的）全部无法解密，只能逐家重新录入。
 PROVIDER_ENCRYPTION_KEY=
 PROVIDER_KEY_FILE=backend/.api-config.key
 ```
@@ -202,8 +213,34 @@ curl -s -I http://127.0.0.1:3000
 
 - 前端：http://服务器IP:3000
 - API 文档：http://服务器IP:8000/docs
-- 首次登录后先在「API 设置」验证并勾选要用的大模型（GPT / DeepSeek / CatToken），再提交分析任务。
+- **首次登录后配 provider 的路径**：`账户管理 → 接口分组 →（某个分组）→ 配置 API`。
+  每个分组配自己的一套服务地址 / Key / 模型，员工按分组使用。配完点「测试连接」发现模型，
+  再逐个「验证」并勾选，之后才能被选为任务模型。
+  （侧边栏的「API 设置」是全局配置，默认已从导航隐藏，日常不用它。）
 - 升级代码：`cd /opt/bundling && git pull` → 重跑依赖/迁移（如需）→ `sudo systemctl restart bundling-api bundling-worker bundling-frontend`。
+
+## 拉私有仓库（首次）
+
+仓库是私有的，服务器上要先给它凭据。二选一：
+
+**A. Deploy key（推荐，只给这一个仓库的读权限）**
+```bash
+ssh-keygen -t ed25519 -C "bundling-server" -f ~/.ssh/bundling_deploy -N ""
+cat ~/.ssh/bundling_deploy.pub     # 复制这行，到 GitHub 仓库 Settings → Deploy keys → Add（不要勾 write）
+cat >> ~/.ssh/config <<'EOF'
+Host github.com
+  IdentityFile ~/.ssh/bundling_deploy
+  IdentitiesOnly yes
+EOF
+chmod 600 ~/.ssh/config
+ssh -T git@github.com    # 验证，应提示 successfully authenticated
+```
+
+**B. PAT（改用 HTTPS）**
+```bash
+git clone https://<你的PAT>@github.com/00544ngm/bundling-web.git /opt/bundling
+```
+注意 PAT 会明文留在 `.git/config` 里，用完建议换成方案 A。
 
 ## 备份（务必）
 
