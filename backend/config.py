@@ -32,6 +32,11 @@ class BackendSettings(BaseSettings):
     # clients (e.g. managing a server deployment from another machine).
     # Default False keeps the original "localhost only" security posture.
     allow_remote_settings: bool = False
+    # ARQ worker 启动时把上一个进程残留的 running 任务标记为 interrupted。
+    # 本项目按单 worker 部署（systemd bundling-worker 单实例 + max_jobs=1），
+    # 此时启动即意味着那些任务已无人在跑。**若改为多副本 worker，必须置为 false**，
+    # 否则滚动重启会把兄弟副本正在执行的任务误判为中断。
+    recover_interrupted_jobs_on_startup: bool = True
 
 
 @lru_cache
