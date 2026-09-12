@@ -32,8 +32,14 @@ export default function ResultSections({ sections }: ResultSectionsProps) {
   return (
     <div className="space-y-2">
       <p className="text-sm font-medium text-muted-foreground">详细对比</p>
-      {sections.map((section, i) => (
-        <div key={i} className="rounded-xl border">
+      {/*
+        折叠态两列排布、展开态跨满整行：这些区块通常有 8 个，每个折叠时只占
+        一行标题（约 44px），单列堆叠光是表头就吃掉 350px。两列把它砍一半，
+        而展开的内容仍然占满整行宽度，不影响阅读。
+      */}
+      <div className="grid gap-2 sm:grid-cols-2">
+        {sections.map((section, i) => (
+        <div key={i} className={`rounded-xl border ${openSet.has(i) ? "sm:col-span-2" : ""}`}>
           <button
             type="button"
             onClick={() => toggle(i)}
@@ -59,7 +65,8 @@ export default function ResultSections({ sections }: ResultSectionsProps) {
             </div>
           )}
         </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
