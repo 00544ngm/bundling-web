@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import {
+  ChevronDown,
+  ChevronRight,
   FileText,
   History,
   KeyRound,
@@ -12,7 +14,9 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/auth/auth-context";
+import { accountNav, isInAccountSection } from "./account-nav";
 
 const baseNavItems = [
   { href: "/", label: "工作台", icon: LayoutDashboard },
@@ -20,15 +24,17 @@ const baseNavItems = [
   { href: "/results", label: "结果展示", icon: FileText },
 ];
 
-const adminNavItems = [
-  { href: "/admin", label: "账户管理", icon: UsersRound },
-  { href: "/settings/api", label: "API 设置", icon: KeyRound },
-];
+const apiSettingsItem = { href: "/settings/api", label: "API 设置", icon: KeyRound };
+
+const itemClass =
+  "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-navigation-foreground/70 transition-colors hover:bg-white/10 hover:text-navigation-foreground";
 
 export default function MobileNav() {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
   const { isAdmin, logout } = useAuth();
-  const navItems = isAdmin ? [...baseNavItems, ...adminNavItems] : baseNavItems;
+  // 与桌面侧边栏一致：进到账户管理这一组时默认展开。
+  const [accountOpen, setAccountOpen] = useState(isInAccountSection(pathname));
 
   return (
     <>
@@ -63,18 +69,62 @@ export default function MobileNav() {
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <nav className="flex-1 space-y-1 p-3">
-              {navItems.map((item) => (
+            <nav className="flex-1 space-y-1 overflow-y-auto p-3">
+              {baseNavItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-navigation-foreground/70 transition-colors hover:bg-white/10 hover:text-navigation-foreground"
+                  className={itemClass}
                   onClick={() => setOpen(false)}
                 >
                   <item.icon className="h-4 w-4" />
                   <span>{item.label}</span>
                 </Link>
               ))}
+
+              {isAdmin && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setAccountOpen((value) => !value)}
+                    aria-expanded={accountOpen}
+                    className={itemClass}
+                  >
+                    <UsersRound className="h-4 w-4 shrink-0" />
+                    <span className="flex-1 text-left">{accountNav.label}</span>
+                    {accountOpen ? (
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                    )}
+                  </button>
+
+                  {accountOpen && (
+                    <div className="space-y-1 pl-4">
+                      {accountNav.items.map((item) => (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className={itemClass}
+                          onClick={() => setOpen(false)}
+                        >
+                          <span className="h-1 w-1 shrink-0 rounded-full bg-current opacity-50" />
+                          <span>{item.label}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+
+                  <Link
+                    href={apiSettingsItem.href}
+                    className={itemClass}
+                    onClick={() => setOpen(false)}
+                  >
+                    <apiSettingsItem.icon className="h-4 w-4" />
+                    <span>{apiSettingsItem.label}</span>
+                  </Link>
+                </>
+              )}
             </nav>
             <div className="border-t border-white/10 p-3">
               <button
