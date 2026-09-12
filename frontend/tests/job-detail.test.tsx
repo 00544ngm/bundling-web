@@ -6,6 +6,9 @@ import { setupServer } from "msw/node";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import JobDetailPage from "@/app/jobs/[jobId]/page";
+import { triggerCrossReview } from "@/lib/api/cross-review";
+
+const triggerCrossReviewMock = vi.mocked(triggerCrossReview);
 
 const API_BASE = "http://localhost:8000";
 
@@ -16,6 +19,12 @@ const pushMock = vi.fn();
 vi.mock("next/navigation", () => ({
   useParams: () => ({ jobId: mockJobId() }),
   useRouter: () => ({ push: pushMock }),
+}));
+
+// 交叉验证必须走统一客户端（lib/api/cross-review → apiFetch → 带 Authorization）。
+// 页面里曾经是一段裸 fetch，只带 Content-Type，加鉴权后必然 401。
+vi.mock("@/lib/api/cross-review", () => ({
+  triggerCrossReview: vi.fn().mockResolvedValue({ status: "queued", job_id: "job-dual" }),
 }));
 
 function createWrapper() {
@@ -1008,4 +1017,81 @@ it("shows the bundle-plan tab on the job detail page when the result carries bun
   const tab = await screen.findByRole("tab", { name: "组合方案" });
   await user.click(tab);
   expect(await screen.findByText("可形成三种不同任务的组合")).toBeInTheDocument();
+});
+
+// 回归：交叉验证按钮曾经调的是页面里手写的裸 fetch（只带 Content-Type、不带
+// Authorization），服务端要求登录后每次都是 401 —— 表现就是「点了没反应」。
+// 这条用例断言它必须经过统一客户端，堵住这一类绕过。
+it("starts cross-review through the shared API client", async () => {
+  const user = userEvent.setup();
+  const verifiedAt = "2026-07-15T12:00:00Z";
+  const modelOption = (model: string) => ({
+    provider: "openai",
+    provider_display_name: "OpenAI",
+    api_protocol: "openai",
+    model,
+    is_default: model === "gpt-5.6-terra",
+    is_selected: true,
+    is_enabled: true,
+    test_status: "verified" as const,
+    tested_at: verifiedAt,
+    test_message: "结构化验证成功",
+  });
+
+  server.use(
+    http.get(`${API_BASE}/api/v1/jobs/:jobId`, () =>
+      HttpResponse.json({
+        id: "job-dual",
+        mode: "hypothesis",
+        status: "completed",
+        progress: 100,
+        error_code: null,
+        error_message: null,
+        retry_of_id: null,
+        created_at: "2026-07-15T12:00:00Z",
+        updated_at: "2026-07-15T12:00:01Z",
+        request_payload: { url: "https://walmart.com/ip/123" },
+        result_payload: {
+          models: {
+            gpt: { grade: "A", score: 85, structured_directions: [] },
+            deepseek: { grade: "B", score: 80, structured_directions: [] },
+          },
+        },
+      })
+    ),
+    http.get(`${API_BASE}/api/v1/workbench/providers`, () =>
+      HttpResponse.json([
+        {
+          slug: "openai",
+          api_protocol: "openai",
+          display_name: "OpenAI",
+          role: "primary",
+          base_url: "https://api.openai.com/v1",
+          default_model: "gpt-5.6-terra",
+          supported_models: ["gpt-5.6-terra", "gpt-5.6-sol"],
+          model_options: [modelOption("gpt-5.6-terra"), modelOption("gpt-5.6-sol")],
+          is_enabled: true,
+          configured: true,
+          masked_api_key: "••••4F2A",
+          last_test_status: "success",
+          last_tested_at: null,
+          last_test_message: null,
+          updated_at: null,
+        },
+      ])
+    )
+  );
+
+  render(<JobDetailPage />, { wrapper: createWrapper() });
+
+  const button = await screen.findByRole("button", { name: /开始交叉验证/ });
+  await waitFor(() => expect(button).not.toBeDisabled());
+  await user.click(button);
+
+  await waitFor(() => expect(triggerCrossReviewMock).toHaveBeenCalled());
+  expect(triggerCrossReviewMock).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.objectContaining({ provider: "openai" }),
+    expect.objectContaining({ provider: "openai" })
+  );
 });

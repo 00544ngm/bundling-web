@@ -78,12 +78,10 @@ export default function JobDetailPage() {
   const providersQuery = useQuery({ queryKey: ["providers", "cross-review"], queryFn: listMyProviders, staleTime: 30000 });
 
   const crossReviewMutation = useMutation({
-    mutationFn: async ({ reviewerA, reviewerB }: { reviewerA: { provider: string; model: string }; reviewerB: { provider: string; model: string } }) => {
-      const base = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
-      const res = await fetch(`${base}/api/v1/jobs/${jobId}/cross-review`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reviewer_a: reviewerA, reviewer_b: reviewerB }) });
-      if (!res.ok) throw new Error("触发交叉验证失败");
-      return res.json();
-    },
+    // 必须走统一客户端：这里原先是一段裸 fetch，只带了 Content-Type、不带
+    // Authorization，服务端加了登录鉴权之后每次都是 401，按钮点了毫无反应。
+    mutationFn: ({ reviewerA, reviewerB }: { reviewerA: { provider: string; model: string }; reviewerB: { provider: string; model: string } }) =>
+      triggerCrossReview(jobId, reviewerA, reviewerB),
     onSuccess: () => {
       // Start frequent polling until cross-review appears
       const interval = setInterval(() => {
