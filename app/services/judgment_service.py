@@ -10,7 +10,6 @@ from app.domain.dto import HypothesisDTO, JudgmentResultDTO, ProductDTO
 from app.domain.interfaces import LLMClient
 from app.domain.schemas import JudgmentOutput
 
-
 JUDGMENT_PROMPT_PATH = Path(__file__).parent.parent / "infrastructure" / "llm" / "prompts" / "judgment_b.txt"
 
 

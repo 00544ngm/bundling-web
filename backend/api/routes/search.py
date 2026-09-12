@@ -5,9 +5,9 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.infrastructure.walmart.search import search_walmart_page
 from backend.api.dependencies import get_browser
 from backend.security.auth import get_current_user
-from app.infrastructure.walmart.search import search_walmart_page
 
 # Server (web) mode: product search is part of task authoring and requires a
 # valid login. Desktop mode: get_current_user returns None, unchanged.

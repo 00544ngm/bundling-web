@@ -7,7 +7,6 @@ from uuid import UUID
 from arq import create_pool
 from arq.connections import RedisSettings
 from fastapi import Depends
-from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.application.job_service import JobService
@@ -18,11 +17,11 @@ from backend.application.provider_clients import (
 from backend.application.provider_service import ProviderService
 from backend.application.queue import ArqJobQueue, JobQueue
 from backend.config import get_backend_settings
+from backend.db.auth_repository import ApiGroupRepository, UserRepository
 from backend.db.provider_repository import (
     GroupProviderRepository,
     ProviderConfigurationRepository,
 )
-from backend.db.auth_repository import ApiGroupRepository, UserRepository
 from backend.db.repositories import JobRepository
 from backend.db.session import get_session
 from backend.security.provider_crypto import ProviderCrypto

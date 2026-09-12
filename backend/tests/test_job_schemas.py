@@ -9,7 +9,6 @@ from backend.api.schemas.jobs import (
     JudgmentJobCreate,
 )
 
-
 VALID_A_URL = "https://www.walmart.com/ip/example/12345"
 
 

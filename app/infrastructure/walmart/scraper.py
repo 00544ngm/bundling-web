@@ -276,7 +276,6 @@ class ProductDetailScraper(ProductScraper):
         except Exception as error:
             if _is_browser_target_closed(error):
                 raise
-            pass
 
     async def _extract_text(self, page, selector: str) -> str:
         try:

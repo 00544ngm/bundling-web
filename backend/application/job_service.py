@@ -134,7 +134,7 @@ class JobService:
         scope = payload.get("api_group_id")
         gate = None
         if scope is not None and self._scope_provider_available is not None:
-            gate = lambda provider, model: self._scope_provider_available(  # noqa: E731
+            gate = lambda provider, model: self._scope_provider_available(
                 provider, model, str(scope)
             )
         elif self._provider_available is not None:
@@ -176,7 +176,7 @@ class JobService:
             provider = payload.get("provider") or "openai"
             usage = None
             if scope is not None and self._scope_model_used is not None:
-                usage = lambda p, m: self._scope_model_used(p, m, str(scope))  # noqa: E731
+                usage = lambda p, m: self._scope_model_used(p, m, str(scope))
             else:
                 usage = self._model_used
             try:

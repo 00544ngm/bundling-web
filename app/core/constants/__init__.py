@@ -4,7 +4,7 @@ WALMART_SEARCH_PATH = "/search"
 RESULTS_ARIA_LABEL_PATTERN = r'Results for\s+".*?"\s+\(([\d,+]+\+?)\)'
 
 __all__ = [
+    "RESULTS_ARIA_LABEL_PATTERN",
     "WALMART_BASE_URL",
     "WALMART_SEARCH_PATH",
-    "RESULTS_ARIA_LABEL_PATTERN",
 ]

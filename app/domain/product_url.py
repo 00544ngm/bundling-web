@@ -5,7 +5,6 @@ from urllib.parse import urlparse
 
 from app.core.exceptions import UnsupportedPlatformError
 
-
 PLATFORM_HOSTS: dict[str, frozenset[str]] = {
     "walmart": frozenset({"walmart.com", "www.walmart.com"}),
     "amazon": frozenset(

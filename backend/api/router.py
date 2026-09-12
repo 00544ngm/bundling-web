@@ -9,7 +9,6 @@ from backend.api.routes.providers import router as providers_router
 from backend.api.routes.search import router as search_router
 from backend.api.routes.workbench import router as workbench_router
 
-
 router = APIRouter()
 router.include_router(health_router)
 router.include_router(auth_router)

@@ -14,7 +14,6 @@ from app.core.exceptions import (
     WalmartNetworkError,
 )
 from backend.application.analysis_runner import RunnerResult
-from backend.config import BackendSettings
 from backend.workers import jobs as worker_jobs
 
 

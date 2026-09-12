@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock, ANY
+from unittest.mock import ANY, AsyncMock, Mock
 
 import pytest
 from pydantic import SecretStr

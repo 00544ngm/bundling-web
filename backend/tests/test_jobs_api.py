@@ -10,6 +10,7 @@ from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError
 
 from backend.api.dependencies import (
+    get_api_group_repository,
     get_job_queue,
     get_job_repository,
     get_job_service,
@@ -18,7 +19,6 @@ from backend.api.dependencies import (
 from backend.api.schemas.jobs import JobNameUpdate
 from backend.application.errors import ConflictError, NotFoundError
 from backend.application.job_service import JobService
-from backend.api.dependencies import get_api_group_repository
 from backend.config import BackendSettings, get_backend_settings
 from backend.main import create_app
 from backend.security.auth import get_current_user

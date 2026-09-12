@@ -134,7 +134,9 @@ class PlaywrightBrowserManager(BrowserManagerInterface):
                     "or start Chrome with --remote-debugging-port=9222 before running jobs."
                 )
             CHROME_USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
-            self._chrome_process = subprocess.Popen(build_chrome_launch_args(), shell=False)
+            # Popen 立即返回、不等待子进程，阻塞可忽略；且 worker 是 max_jobs=1，
+            # 进程内没有别的协程会被它挡住。
+            self._chrome_process = subprocess.Popen(build_chrome_launch_args(), shell=False)  # noqa: ASYNC220
             self._owns_chrome_process = True
         elif self._chrome_process is None:
             self._owns_chrome_process = False
@@ -150,7 +152,10 @@ class PlaywrightBrowserManager(BrowserManagerInterface):
     async def _check_cdp(self) -> bool:
         import urllib.request
         try:
-            resp = urllib.request.urlopen(
+            # 同步 urllib 会阻塞事件循环，但这里是「Chrome 在不在」的一次性探测
+            # （不在循环里重复调用），超时上限 2s；worker 单任务执行，没有别的
+            # 协程因此被饿死。改成 aiohttp 属独立改进，不在 lint 收敛范围内动。
+            resp = urllib.request.urlopen(  # noqa: ASYNC210
                 f"http://{CDP_HOST}:{CDP_PORT}/json/version", timeout=2
             )
             return resp.status == 200

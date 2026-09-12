@@ -1,0 +1,25 @@
+# Ruff 配置。
+#
+# 此前仓库里没有任何 lint 配置，`ruff check` 跑的是「当前安装版本碰巧选中的规则
+# 集」—— 数字会随 ruff 升级漂移，也表达不了项目意图。这里只固定一件必须固定的事：
+#
+# FastAPI 的依赖注入就是靠「在参数默认值里调用 Depends()/Path()/Query()」实现的，
+# 这是框架要求的标准写法，不是 B008（在默认参数里调用函数）要拦的那种可变默认值。
+# 不豁免的话本项目会稳定产生 83 条纯误报（实测：73 条 Depends + 10 条 Path），
+# 把真正的问题淹没掉。
+#
+# 其余规则沿用 ruff 的默认规则集。是否要专门收窄或扩宽规则集，属独立决策，
+# 不在这里顺手决定。
+
+[lint.flake8-bugbear]
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Path",
+    "fastapi.Query",
+    "fastapi.Header",
+    "fastapi.Body",
+    "fastapi.Cookie",
+    "fastapi.Form",
+    "fastapi.File",
+    "fastapi.Security",
+]

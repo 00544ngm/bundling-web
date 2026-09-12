@@ -13,8 +13,6 @@ from backend.api.dependencies import (
     get_job_service,
     get_provider_repository,
 )
-from backend.db.auth_repository import ApiGroupRepository
-from backend.db.models import User
 from backend.api.schemas.jobs import (
     BatchJobCreate,
     CrossReviewCreate,
@@ -36,6 +34,8 @@ from backend.application.job_service import JobService
 from backend.application.queue import JobQueue
 from backend.application.result_highlights import extract_result_highlights
 from backend.config import BackendSettings, get_backend_settings
+from backend.db.auth_repository import ApiGroupRepository
+from backend.db.models import User
 from backend.db.provider_repository import (
     GroupProviderRepository,
     ProviderConfigurationRepository,

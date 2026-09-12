@@ -18,10 +18,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from backend.api.schemas.jobs import HypothesisJobCreate
 from backend.api.schemas.providers import ProviderUpdate
+from backend.application.errors import ServiceUnavailableError
 from backend.application.job_service import JobService
 from backend.application.provider_clients import ProviderClientResolver
 from backend.application.provider_service import ProviderService
-from backend.application.errors import ServiceUnavailableError
 from backend.db.base import Base
 from backend.db.models import ApiGroup
 from backend.db.provider_repository import GroupProviderRepository

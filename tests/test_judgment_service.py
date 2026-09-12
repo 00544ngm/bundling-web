@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.core.exceptions import LLMError
 from app.domain.dto import HypothesisDTO, JudgmentResultDTO, ProductDTO
 from app.services.judgment_service import JudgmentService
 

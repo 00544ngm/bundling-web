@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from backend.logging import RequestIDFilter
 from backend.api.dependencies import get_job_queue
+from backend.logging import RequestIDFilter
 from backend.main import create_app
 
 

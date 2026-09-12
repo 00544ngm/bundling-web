@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 from app.core.logger import logger
-
 from app.domain.dto import HypothesisResultDTO
 from app.domain.market_evidence import (
     MarketEvidenceRecord,
