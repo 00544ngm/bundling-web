@@ -8,6 +8,7 @@ import { ArrowRight, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { submitHypothesis } from "@/lib/api/jobs";
 import { hypothesisSchema, type HypothesisFormData } from "@/lib/schemas/job-forms";
 import ModelSelect from "./model-select";
+import BundlePlanToggle from "./bundle-plan-toggle";
 import { ProviderSetupNotice, usePrimaryProviders } from "./provider-availability";
 import type { RotationCandidate } from "@/lib/api/types";
 
@@ -18,6 +19,7 @@ interface HypothesisFormProps {
 export default function HypothesisForm({ isSubmitting }: HypothesisFormProps) {
   const [showModelSettings, setShowModelSettings] = useState(false);
   const [rotation, setRotation] = useState<{ enabled: boolean; candidates: RotationCandidate[] }>({ enabled: false, candidates: [] });
+  const [bundlePlansEnabled, setBundlePlansEnabled] = useState(true);
   const providerQuery = usePrimaryProviders();
   const { register, handleSubmit, formState: { errors } } = useForm<HypothesisFormData>({
     resolver: zodResolver(hypothesisSchema),
@@ -31,6 +33,7 @@ export default function HypothesisForm({ isSubmitting }: HypothesisFormProps) {
       provider: data.provider || undefined,
       rotation_enabled: rotation.enabled,
       ...(rotation.enabled ? { rotation_candidates: rotation.candidates } : {}),
+      bundle_plans_enabled: bundlePlansEnabled,
     }),
     onSuccess: (job) => {
       window.location.href = `/jobs/${job.id}`;
@@ -105,6 +108,9 @@ export default function HypothesisForm({ isSubmitting }: HypothesisFormProps) {
                 onRotationChange={(enabled, candidates) => setRotation({ enabled, candidates })}
               />
             )}
+            <div className="mt-3 border-t pt-3">
+              <BundlePlanToggle enabled={bundlePlansEnabled} onChange={setBundlePlansEnabled} />
+            </div>
           </div>
         )}
       </div>

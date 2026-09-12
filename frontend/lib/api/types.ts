@@ -461,6 +461,8 @@ export interface HypothesisJobCreate {
   provider?: string;
   rotation_enabled?: boolean;
   rotation_candidates?: RotationCandidate[];
+  /** 指令C（完整组合方案）阶段。缺省即开启；关闭可省一次模型调用。 */
+  bundle_plans_enabled?: boolean;
 }
 
 export interface JudgmentJobCreate {
@@ -480,6 +482,8 @@ export interface BatchJobCreate {
   provider?: string;
   rotation_enabled?: boolean;
   rotation_candidates?: RotationCandidate[];
+  /** 指令C（完整组合方案）阶段。缺省即开启；关闭可省一次模型调用。 */
+  bundle_plans_enabled?: boolean;
 }
 
 export interface ApiError {

@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import WorkbenchTabs from "@/components/workbench/workbench-tabs";
 import { listMyProviders } from "@/lib/api/workbench";
-import { submitJudgment } from "@/lib/api/jobs";
+import { submitJudgment, submitHypothesis } from "@/lib/api/jobs";
 import { ApiError } from "@/lib/api/client";
 import { AuthProvider } from "@/components/auth/auth-context";
 import { seedAuth } from "./auth-test-utils";
@@ -18,11 +18,12 @@ vi.mock("@/lib/api/workbench", async (importOriginal) => {
 });
 vi.mock("@/lib/api/jobs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/jobs")>();
-  return { ...actual, submitJudgment: vi.fn() };
+  return { ...actual, submitJudgment: vi.fn(), submitHypothesis: vi.fn() };
 });
 
 const listProvidersMock = vi.mocked(listMyProviders);
 const submitJudgmentMock = vi.mocked(submitJudgment);
+const submitHypothesisMock = vi.mocked(submitHypothesis);
 const availableProviders = [
   {
     slug: "openai" as const,
@@ -150,6 +151,31 @@ it("disables hypothesis submission while provider settings are loading", () => {
   render(<WorkbenchTabs />, { wrapper: Wrapper });
 
   expect(screen.getByRole("button", { name: /提交中/ })).toBeDisabled();
+});
+
+it("turns instruction C off for hypothesis jobs when the bundle-plan toggle is unchecked", async () => {
+  const user = userEvent.setup();
+  submitHypothesisMock.mockResolvedValue({ id: "job-toggle" } as never);
+  render(<WorkbenchTabs />, { wrapper: Wrapper });
+
+  const activePanel = getActivePanel();
+  await user.click(within(activePanel).getByText("模型设置"));
+
+  const toggle = within(activePanel).getByRole("checkbox", { name: /组合方案/ });
+  expect(toggle).toBeChecked(); // 默认开启，与后端缺省一致
+  await user.click(toggle);
+
+  await user.type(
+    within(activePanel).getByRole("textbox", { name: "主品商品链接" }),
+    "https://www.walmart.com/ip/a/1"
+  );
+  await user.click(within(activePanel).getByRole("button", { name: "分析" }));
+
+  await waitFor(() =>
+    expect(submitHypothesisMock).toHaveBeenCalledWith(
+      expect.objectContaining({ bundle_plans_enabled: false })
+    )
+  );
 });
 
 it("shows only enabled primary providers in advanced options", async () => {

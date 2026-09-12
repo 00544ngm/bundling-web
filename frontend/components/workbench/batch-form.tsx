@@ -7,6 +7,7 @@ import { submitBatch } from "@/lib/api/jobs";
 import type { ProviderSlug, RotationCandidate } from "@/lib/api/types";
 import { isKnownPlatform, isLookalikeHost } from "@/lib/schemas/job-forms";
 import ModelSelect from "./model-select";
+import BundlePlanToggle from "./bundle-plan-toggle";
 import { ProviderSetupNotice, usePrimaryProviders } from "./provider-availability";
 
 interface ParseResult { valid: string[]; invalid: string[]; }
@@ -35,6 +36,7 @@ export default function BatchForm() {
   const [raw, setRaw] = useState("");
   const [name, setName] = useState("");
   const [rotation, setRotation] = useState<{ enabled: boolean; candidates: RotationCandidate[] }>({ enabled: false, candidates: [] });
+  const [bundlePlansEnabled, setBundlePlansEnabled] = useState(true);
   const providerQuery = usePrimaryProviders();
   const { register, getValues } = useForm<BatchModelFields>({
     defaultValues: { provider: "", model: "" },
@@ -51,6 +53,7 @@ export default function BatchForm() {
         provider: selection.provider || undefined,
         rotation_enabled: rotation.enabled,
         ...(rotation.enabled ? { rotation_candidates: rotation.candidates } : {}),
+        bundle_plans_enabled: bundlePlansEnabled,
       });
     },
   });
@@ -105,6 +108,10 @@ export default function BatchForm() {
           modelRegistration={register("model")}
           onRotationChange={(enabled, candidates) => setRotation({ enabled, candidates })}
         />
+      )}
+
+      {!hasNoProviders && !providerQuery.isLoading && (
+        <BundlePlanToggle enabled={bundlePlansEnabled} onChange={setBundlePlansEnabled} />
       )}
 
       <button

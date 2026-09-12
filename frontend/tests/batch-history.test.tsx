@@ -446,6 +446,39 @@ it("submits batch form with valid URLs", async () => {
   expect(await screen.findByText(/提交成功/i)).toBeInTheDocument();
 });
 
+it("turns instruction C off for batch jobs when the bundle-plan toggle is unchecked", async () => {
+  const user = userEvent.setup();
+  const captured: { body?: Record<string, unknown> } = {};
+  server.use(
+    http.post(`${API_BASE}/api/v1/jobs/batch`, async ({ request }) => {
+      captured.body = (await request.json()) as Record<string, unknown>;
+      return HttpResponse.json({
+        id: "batch-toggle",
+        mode: "batch",
+        status: "queued",
+        progress: 0,
+        error_code: null,
+        error_message: null,
+        retry_of_id: null,
+        created_at: "2026-07-15T14:00:00Z",
+        updated_at: "2026-07-15T14:00:00Z",
+      });
+    })
+  );
+  render(<BatchForm />, { wrapper: createWrapper() });
+
+  const toggle = await screen.findByRole("checkbox", { name: /组合方案/ });
+  expect(toggle).toBeChecked(); // 默认开启，与后端缺省一致
+  await user.click(toggle);
+  expect(toggle).not.toBeChecked();
+
+  await user.type(screen.getByPlaceholderText(/每行一个商品链接/i), "https://walmart.com/ip/111");
+  await screen.findByText(/1.*个有效/);
+  await user.click(screen.getByRole("button", { name: /提交/i }));
+
+  await waitFor(() => expect(captured.body?.bundle_plans_enabled).toBe(false));
+});
+
 it("shows only enabled primary providers in the batch form", async () => {
   render(<BatchForm />, { wrapper: createWrapper() });
 
