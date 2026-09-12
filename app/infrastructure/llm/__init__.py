@@ -199,10 +199,15 @@ class OpenAILLMClient(LLMClientInterface):
         for attempt in range(1, max_retries + 1):
             try:
                 if self._uses_responses(model):
+                    # temperature 也必须显式传：Responses 路径以前整个丢掉它，
+                    # 于是 settings.openai_temperature 对 gpt-5 全系静默失效。
+                    # _temperature_param 已按模型过滤，gpt-5.6 等不接受该参数的
+                    # 模型不会因此 400。
                     response = await self._client.responses.create(
                         model=model,
                         input=messages,
                         max_output_tokens=max_tokens,
+                        **temp_param,
                         **kwargs,
                     )
                     return response.output_text or ""
@@ -298,6 +303,7 @@ class OpenAILLMClient(LLMClientInterface):
                         input=compatibility_messages,
                         max_output_tokens=max_tokens,
                         timeout=request_timeout,
+                        **temp_param,
                         **kwargs,
                     )
                     return _parse_structured_json(_response_output_text(response))

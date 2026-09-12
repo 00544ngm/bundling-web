@@ -257,6 +257,44 @@ async def test_gpt5_chat_uses_responses_api(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_responses_path_passes_temperature_when_the_model_accepts_it(monkeypatch):
+    """Responses 路径曾经对**所有**模型丢掉 temperature，使 openai_temperature
+    静默失效。gpt-5.5/gpt-5.6 系不接受该参数（由 _temperature_param 过滤），
+    但 gpt-5.4 这类模型既走 Responses 路径、又接受温度，必须显式传下去。
+    """
+    monkeypatch.setattr(settings, "openai_api_key", "test-key")
+    monkeypatch.setattr(settings, "openai_temperature", 0.3)
+    client = OpenAILLMClient(model="gpt-5.4")
+    create = AsyncMock(return_value=SimpleNamespace(output_text="OK"))
+    client._client = SimpleNamespace(responses=SimpleNamespace(create=create))
+
+    await client.chat(
+        messages=[{"role": "user", "content": "reply OK"}],
+        max_tokens=64,
+        max_retries=1,
+    )
+
+    assert create.await_args.kwargs["temperature"] == 0.3
+
+
+@pytest.mark.asyncio
+async def test_responses_path_omits_temperature_when_the_model_rejects_it(monkeypatch):
+    """反向护栏：gpt-5.6 不接受 temperature，传下去会 400。"""
+    monkeypatch.setattr(settings, "openai_api_key", "test-key")
+    client = OpenAILLMClient(model="gpt-5.6")
+    create = AsyncMock(return_value=SimpleNamespace(output_text="OK"))
+    client._client = SimpleNamespace(responses=SimpleNamespace(create=create))
+
+    await client.chat(
+        messages=[{"role": "user", "content": "reply OK"}],
+        max_tokens=64,
+        max_retries=1,
+    )
+
+    assert "temperature" not in create.await_args.kwargs
+
+
+@pytest.mark.asyncio
 async def test_gpt5_structured_chat_uses_responses_api(monkeypatch):
     monkeypatch.setattr(settings, "openai_api_key", "test-key")
     client = OpenAILLMClient(model="gpt-5.5-pro")
