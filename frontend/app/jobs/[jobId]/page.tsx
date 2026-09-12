@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getJob, retryJob } from "@/lib/api/jobs";
-import { listProviders } from "@/lib/api/providers";
+import { listMyProviders } from "@/lib/api/workbench";
 import { providerModelOptions } from "@/lib/model-identity";
 import { isFreshVerifiedModel } from "@/lib/provider-model-status";
 import { triggerCrossReview } from "@/lib/api/cross-review";
@@ -72,7 +72,10 @@ export default function JobDetailPage() {
     },
   });
 
-  const providersQuery = useQuery({ queryKey: ["providers", "cross-review"], queryFn: () => listProviders(), staleTime: 30000 });
+  // 评审模型候选必须走 /workbench/providers（按登录者分组作用域的服务端裁剪），
+  // 不能用管理端的 /settings/providers —— 后者要 require_admin，员工打开本页会 403，
+  // 「评审模型 A/B」两个下拉会空掉，交叉验证对员工变成不可用。
+  const providersQuery = useQuery({ queryKey: ["providers", "cross-review"], queryFn: listMyProviders, staleTime: 30000 });
 
   const crossReviewMutation = useMutation({
     mutationFn: async ({ reviewerA, reviewerB }: { reviewerA: { provider: string; model: string }; reviewerB: { provider: string; model: string } }) => {
@@ -447,6 +450,7 @@ export default function JobDetailPage() {
               auditOutcome={activeResult?.audit_outcome}
               rejectionSummary={activeResult?.rejection_summary}
               rejectedBProducts={taskRejectedBProducts}
+              bundlePlans={payload?.bundle_plans}
             />
           )}
         </>

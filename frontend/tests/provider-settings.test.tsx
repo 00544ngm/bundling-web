@@ -6,6 +6,7 @@ import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import type { ReactNode } from "react";
 import ProviderSettingsPanel from "@/components/settings/provider-settings-panel";
+import { AuthProvider } from "@/components/auth/auth-context";
 
 const providers = [
   {
@@ -135,7 +136,7 @@ function Wrapper({ children }: { children: ReactNode }) {
     <QueryClientProvider
       client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
     >
-      {children}
+      <AuthProvider>{children}</AuthProvider>
     </QueryClientProvider>
   );
 }
@@ -578,21 +579,26 @@ it("warns when a custom provider protocol differs from the saved protocol", asyn
   );
 });
 
-it("invalidates the saved model catalog when an OpenAI endpoint changes", async () => {
+it("keeps the saved model catalog and flags a re-test when an OpenAI endpoint changes", async () => {
   render(<ProviderSettingsPanel />, { wrapper: Wrapper });
 
   await screen.findByDisplayValue("https://api.openai.com/v1");
   expect(screen.getByRole("button", { name: "保存配置" })).not.toBeDisabled();
+  expect(screen.queryByText(/参数已变化/)).not.toBeInTheDocument();
 
   fireEvent.change(screen.getByDisplayValue("https://api.openai.com/v1"), {
     target: { value: "https://api.openai.com/v2" },
   });
 
   expect(screen.getByRole("button", { name: "保存配置" })).not.toBeDisabled();
-  expect(screen.getByText(/尚未发现.*模型/)).toBeInTheDocument();
+  // 自项目B 的 9a5ff7a 起，待复测只拦截「新发现但未验证」的模型；已保存
+  // （已验证/已勾选）的目录保持可见，改由这行提示告知需要复测。旧断言
+  // （目录清空、显示「尚未发现可用模型」）描述的是项目A 的行为，已被取代。
+  expect(screen.getByText(/参数已变化/)).toBeInTheDocument();
+  expect(screen.queryByText(/尚未发现.*模型/)).not.toBeInTheDocument();
 });
 
-it("clears the visible model catalog when a provider test fails", async () => {
+it("keeps the saved model catalog visible when a provider test fails", async () => {
   server.use(
     http.post(
       "http://localhost:8000/api/v1/settings/providers/custom/test",
@@ -619,10 +625,10 @@ it("clears the visible model catalog when a provider test fails", async () => {
   expect(await screen.findByRole("alert")).toHaveTextContent(
     "The configured model was not found or is unavailable"
   );
-  await waitFor(() => {
-    expect(screen.queryByText(/自定义 API · OpenAI 兼容 · model-x/)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("默认模型")).not.toBeInTheDocument();
-  });
+  // 失败的复测会清掉「新发现」的模型，但已保存的已验证条目按 9a5ff7a 的约定保留
+  // ——否则一次失败的复测就会把管理端已确认的目录清空。旧断言（目录消失、「默认
+  // 模型」隐藏）描述的是项目A 的行为，已被该特性取代。
+  expect(screen.getByText(/自定义 API · OpenAI 兼容 · model-x/)).toBeInTheDocument();
 });
 
 it("paginates a large model catalog ten models at a time", async () => {

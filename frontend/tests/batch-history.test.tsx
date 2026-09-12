@@ -7,6 +7,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import BatchForm from "@/components/workbench/batch-form";
 import HistoryPage from "@/app/history/page";
+import { AuthProvider } from "@/components/auth/auth-context";
+import { seedAuth } from "./auth-test-utils";
 
 const API_BASE = "http://localhost:8000";
 
@@ -25,7 +27,9 @@ function createWrapper() {
   });
   return function Wrapper({ children }: { children: ReactNode }) {
     return (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>{children}</AuthProvider>
+      </QueryClientProvider>
     );
   };
 }
@@ -95,7 +99,7 @@ const mockJobs = {
 };
 
 const handlers = [
-  http.get(`${API_BASE}/api/v1/settings/providers`, () =>
+  http.get(`${API_BASE}/api/v1/workbench/providers`, () =>
     HttpResponse.json([
       {
         slug: "openai",
@@ -196,6 +200,8 @@ beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterAll(() => server.close());
 beforeEach(() => {
   localStorage.clear();
+  // 「没有可用主模型」时展示的「前往 API 设置」入口只对管理员渲染。
+  seedAuth();
   server.resetHandlers();
 });
 afterEach(() => vi.useRealTimers());
@@ -498,7 +504,7 @@ it("saves the batch model preference without changing other entry preferences", 
 
 it("blocks batch submission and links to settings when no primary provider is available", async () => {
   server.use(
-    http.get(`${API_BASE}/api/v1/settings/providers`, () => HttpResponse.json([]))
+    http.get(`${API_BASE}/api/v1/workbench/providers`, () => HttpResponse.json([]))
   );
   render(<BatchForm />, { wrapper: createWrapper() });
 

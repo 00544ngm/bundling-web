@@ -4,19 +4,24 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import WorkbenchTabs from "@/components/workbench/workbench-tabs";
-import { listProviders } from "@/lib/api/providers";
+import { listMyProviders } from "@/lib/api/workbench";
 import { submitJudgment } from "@/lib/api/jobs";
 import { ApiError } from "@/lib/api/client";
+import { AuthProvider } from "@/components/auth/auth-context";
+import { seedAuth } from "./auth-test-utils";
 
-vi.mock("@/lib/api/providers", () => ({
-  listProviders: vi.fn(),
-}));
+// 表单的可选模型来自 /workbench/providers（按登录者分组作用域的服务端裁剪），
+// 不再走管理端的 /settings/providers。
+vi.mock("@/lib/api/workbench", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/workbench")>();
+  return { ...actual, listMyProviders: vi.fn() };
+});
 vi.mock("@/lib/api/jobs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/jobs")>();
   return { ...actual, submitJudgment: vi.fn() };
 });
 
-const listProvidersMock = vi.mocked(listProviders);
+const listProvidersMock = vi.mocked(listMyProviders);
 const submitJudgmentMock = vi.mocked(submitJudgment);
 const availableProviders = [
   {
@@ -67,13 +72,15 @@ const availableProviders = [
 beforeEach(() => {
   localStorage.clear();
   vi.clearAllMocks();
+  // 「没有可用主模型」时展示的「前往 API 设置」入口只对管理员渲染。
+  seedAuth();
   listProvidersMock.mockResolvedValue(availableProviders);
 });
 
 function Wrapper({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      {children}
+      <AuthProvider>{children}</AuthProvider>
     </QueryClientProvider>
   );
 }

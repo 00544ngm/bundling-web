@@ -32,7 +32,7 @@ function createWrapper() {
 }
 
 const handlers = [
-  http.get(`${API_BASE}/api/v1/settings/providers`, () => HttpResponse.json([])),
+  http.get(`${API_BASE}/api/v1/workbench/providers`, () => HttpResponse.json([])),
   http.get(`${API_BASE}/api/v1/jobs/:jobId`, ({ params }) => {
     const { jobId } = params;
     if (jobId === "not-found") {
@@ -572,7 +572,7 @@ it.skip("offers both CatToken protocols for cross-review and hides provider-leve
     ...overrides,
   });
   server.use(
-    http.get(`${API_BASE}/api/v1/settings/providers`, () =>
+    http.get(`${API_BASE}/api/v1/workbench/providers`, () =>
       HttpResponse.json([
         provider({}),
         provider({
@@ -704,7 +704,7 @@ it.skip("revalidates cross-review selections when the verified model catalog ref
   let currentProviders = [catOpenAI, catClaude, fallback];
   const postedReviews: Array<Record<string, unknown>> = [];
   server.use(
-    http.get(`${API_BASE}/api/v1/settings/providers`, () => HttpResponse.json(currentProviders)),
+    http.get(`${API_BASE}/api/v1/workbench/providers`, () => HttpResponse.json(currentProviders)),
     http.post(`${API_BASE}/api/v1/jobs/:jobId/cross-review`, async ({ request }) => {
       postedReviews.push(await request.json() as Record<string, unknown>);
       return HttpResponse.json({ status: "queued" });
@@ -964,4 +964,48 @@ it("marks missing V2.0 reliability identity and counts as not recorded", async (
   expect(screen.getByLabelText("待补证据 未记录")).toBeInTheDocument();
   expect(screen.getByLabelText("已淘汰 未记录")).toBeInTheDocument();
   expect(screen.queryByText(/requested-only-model/)).not.toBeInTheDocument();
+});
+
+// 回归（合并遗漏）：任务详情页曾经漏传 bundlePlans prop，而「组合方案」tab 是
+// 按 props.bundlePlans 条件渲染的 —— 结果是提交任务后的落地页永远看不到指令C，
+// 只有 /results 页能看（那个文件取的是项目A 的版本）。这条用例刻意渲染**真实页面**
+// 而非直接渲染 ResultAnalysisModule，正是为了堵住那个覆盖盲区。
+it("shows the bundle-plan tab on the job detail page when the result carries bundle plans", async () => {
+  const user = userEvent.setup();
+  server.use(
+    http.get(`${API_BASE}/api/v1/jobs/:jobId`, () =>
+      HttpResponse.json({
+        id: "job-bundle",
+        mode: "hypothesis",
+        status: "completed",
+        progress: 100,
+        error_code: null,
+        error_message: null,
+        retry_of_id: null,
+        created_at: "2026-07-15T12:00:00Z",
+        updated_at: "2026-07-15T12:00:01Z",
+        request_payload: { url: "https://walmart.com/ip/123" },
+        result_payload: {
+          structured_directions: [{ name: "方向甲", score: 85 }],
+          bundle_plans: {
+            stage_version: "bundle_stage_v1",
+            result_status: "completed",
+            verdict: "plans_ready",
+            verdict_statement: "可形成三种不同任务的组合",
+            plans: [],
+            exploratory_plans: [],
+          },
+        },
+      })
+    )
+  );
+
+  render(<JobDetailPage />, { wrapper: createWrapper() });
+
+  // 默认落在「结果详情」视图，指令C 的面板在「方案分析」视图里。
+  await user.click(await screen.findByRole("button", { name: "方案分析" }));
+
+  const tab = await screen.findByRole("tab", { name: "组合方案" });
+  await user.click(tab);
+  expect(await screen.findByText("可形成三种不同任务的组合")).toBeInTheDocument();
 });

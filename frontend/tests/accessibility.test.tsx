@@ -10,6 +10,7 @@ import WorkbenchTabs from "@/components/workbench/workbench-tabs";
 import JobProgress from "@/components/jobs/job-progress";
 import JobError from "@/components/jobs/job-error";
 import BatchForm from "@/components/workbench/batch-form";
+import { AuthProvider } from "@/components/auth/auth-context";
 
 const API_BASE = "http://localhost:8000";
 
@@ -21,7 +22,9 @@ function createWrapper() {
   });
   return function Wrapper({ children }: { children: ReactNode }) {
     return (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>{children}</AuthProvider>
+      </QueryClientProvider>
     );
   };
 }
