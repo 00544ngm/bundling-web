@@ -68,7 +68,14 @@ export default function JobDetailPage() {
   const retryMutation = useMutation({
     mutationFn: () => retryJob(jobId),
     onSuccess: (newJob) => {
-      queryClient.setQueryData(queryKeys.jobs.detail(jobId), newJob);
+      // 「重新跑」会**新建一个任务**（`POST /jobs/{id}/retry` 返回 JobSummary，
+      // 是另一个 id）。这里曾经把它 setQueryData 进**当前任务**的详情缓存槽，
+      // 于是详情页重渲染时读到的是精简结构 —— 没有 request_payload —— 下面
+      // `job.request_payload.b_urls` 直接抛 TypeError，整个页面白屏（Next 的
+      // 「Application error: a client-side exception has occurred」）。
+      // 正确做法是让当前任务重新拉一次（它自己的状态可能也变了），并跳到新任务。
+      queryClient.invalidateQueries({ queryKey: queryKeys.jobs.detail(jobId) });
+      router.push(`/jobs/${newJob.id}`);
     },
   });
 
@@ -202,8 +209,12 @@ export default function JobDetailPage() {
   const taskProductTypeReview = payload?.product_type_review ?? activeResult?.product_type_review;
   const taskRejectedBProducts = payload?.rejected_b_products ?? activeResult?.rejected_b_products;
   const judgmentBProducts = activeResult?.b_products ?? payload?.b_products;
-  const judgmentBUrls = Array.isArray(job.request_payload.b_urls)
-    ? job.request_payload.b_urls.filter(
+  // 详情接口一定带 request_payload，但缓存里有可能被塞进别的形状（历史上
+  // retry 就干过，导致整页白屏）。兜一层：任何异常形状最多少显示一点信息，
+  // 不该把整个页面炸掉。
+  const requestPayload = (job.request_payload ?? {}) as Record<string, unknown>;
+  const judgmentBUrls = Array.isArray(requestPayload.b_urls)
+    ? requestPayload.b_urls.filter(
         (value): value is string => typeof value === "string",
       )
     : undefined;
@@ -221,7 +232,7 @@ export default function JobDetailPage() {
   const bandGrade = cleanLabel(activeResult?.grade);
   const bandTitle = payload?.product_title || job.name || "";
   const elapsedLabel = formatElapsedTime(job.created_at, nowMs);
-  const slowModel = isSlowOpenAIModel(job.request_payload.model);
+  const slowModel = isSlowOpenAIModel(requestPayload.model);
   const waitingForWalmartVerification =
     job.status === "running" &&
     job.error_code === "WALMART_CAPTCHA_REQUIRED";

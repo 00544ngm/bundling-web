@@ -1135,3 +1135,51 @@ it("starts cross-review through the shared API client", async () => {
     expect.objectContaining({ provider: "openai" })
   );
 });
+
+// 回归：失败任务点「重新提交」曾经把整页炸成白屏。
+// 原因：retryJob 返回的是 JobSummary（不含 request_payload / result_payload），
+// 却被 setQueryData 塞进了**当前任务**的详情缓存槽 —— 而它还是个**新任务**
+// （另一个 id）。详情页随后读 job.request_payload.b_urls 抛 TypeError，
+// 浏览器里就是 Next 的「Application error: a client-side exception has occurred」。
+it("navigates to the new job when retrying a failed job instead of corrupting the detail cache", async () => {
+  const user = userEvent.setup();
+  mockJobId.mockReturnValue("job-failed");
+  server.use(
+    http.get(`${API_BASE}/api/v1/jobs/:jobId`, () =>
+      HttpResponse.json({
+        id: "job-failed",
+        mode: "hypothesis",
+        status: "failed",
+        progress: 30,
+        error_code: "SCRAPE_FAILED",
+        error_message: "无法抓取商品页面",
+        retry_of_id: null,
+        created_at: "2026-07-15T12:00:00Z",
+        updated_at: "2026-07-15T12:01:00Z",
+        request_payload: { url: "https://walmart.com/ip/123" },
+        result_payload: null,
+      })
+    ),
+    http.post(`${API_BASE}/api/v1/jobs/:jobId/retry`, () =>
+      HttpResponse.json({
+        id: "job-retried",
+        mode: "hypothesis",
+        status: "queued",
+        progress: 0,
+        error_code: null,
+        error_message: null,
+        retry_of_id: "job-failed",
+        created_at: "2026-07-15T12:02:00Z",
+        updated_at: "2026-07-15T12:02:00Z",
+      })
+    )
+  );
+
+  render(<JobDetailPage />, { wrapper: createWrapper() });
+
+  await user.click(await screen.findByRole("button", { name: "重新提交" }));
+
+  await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/jobs/job-retried"));
+  // 页面没有崩：失败信息仍在
+  expect(screen.getByText(/无法抓取商品页面/)).toBeInTheDocument();
+});
