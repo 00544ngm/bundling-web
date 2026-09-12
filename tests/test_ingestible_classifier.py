@@ -144,10 +144,14 @@ def test_milk_accessories_are_non_food_entities(title):
 
 
 def test_olive_oil_dispenser_conflict_is_not_ingestible():
-    assert (
-        classify_product_type("Olive Oil Dispenser Bottle for Kitchen").status
-        is ProductTypeStatus.UNKNOWN
-    )
+    # 合并说明（2026-09-11）：项目A 修正了食品词误判（A 的 b5a8b3b）。"dispenser
+    # bottle" 属于确证的非食用实体证据，分类器现在直接判 NON_FOOD，而不是因标题里
+    # 出现 "Olive Oil" 就停在 UNKNOWN。旧期望（UNKNOWN）是项目B 的行为，已随 A 的
+    # 分类器更新；该用例"不是可食用商品"的意图由 NON_FOOD 更直接地满足。
+    decision = classify_product_type("Olive Oil Dispenser Bottle for Kitchen")
+
+    assert decision.status is ProductTypeStatus.NON_FOOD
+    assert "dispenser bottle" in decision.matched_terms
 
 
 def test_non_food_product_is_not_blocked_by_incidental_food_usage_in_bullets():

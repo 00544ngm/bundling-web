@@ -17,7 +17,6 @@ from playwright.async_api import (
 
 from app.core.config import settings
 from app.core.exceptions import BrowserError, BrowserTargetClosedError
-from app.core.logger import logger
 from app.domain.interfaces import BrowserManager as BrowserManagerInterface
 
 CDP_PORT = 9222

@@ -24,9 +24,14 @@ VALID_URL = "https://www.walmart.com/ip/example/12345"
 
 
 def test_task_provider_type_is_limited_to_primary_provider_slots():
+    # 合并说明（2026-09-11）：项目B 为任务提交新增了 claude 槽位
+    # （ProviderSlug / provider_service 的 PROVIDER_SLOTS 均含 claude，
+    # api_protocol="anthropic"）。项目A 无该槽位，此处随合并版保留 B 的取值，
+    # 否则前后端类型与提交校验会不一致。
     assert get_args(job_schemas.TaskProvider) == (
         "openai",
         "custom",
+        "claude",
     )
 
 

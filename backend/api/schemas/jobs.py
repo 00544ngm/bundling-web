@@ -11,7 +11,7 @@ from app.domain.product_url import detect_product_platform
 
 JobMode = Literal["hypothesis", "judgment", "batch"]
 JobStatus = Literal["queued", "running", "completed", "failed", "interrupted"]
-TaskProvider = Literal["openai", "custom"]
+TaskProvider = Literal["openai", "custom", "claude"]
 
 
 class RotationCandidate(BaseModel):

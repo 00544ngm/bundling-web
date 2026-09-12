@@ -12,6 +12,14 @@ from app.domain.stickiness import (
 
 FIXTURE = Path(__file__).parent / "fixtures" / "stickiness_v2_cases.json"
 
+# 合并说明（2026-09-11）：项目A 在 `app/domain/pairing_policy.py::DecisionAction`
+# 新增了 `needs_evidence_priority` 档，并把 hold 候选的 recommendation 由
+# `not_recommended` 改为 `observe`（对应 A 的 b5a8b3b「决策档位坍缩」修复：此前
+# 所有 hold 候选都挤在同一个 action 上，丢掉了 24 分的跨度）。
+# fixture 里两个 hold 用例（Unclassified Printer Accessory、
+# Camera Battery with Unknown Model）的 `recommendation` 与 `decision_action`
+# 已随 A 的口径更新；其余 20 个用例的期望值未变。
+
 
 def _decision(case: dict):
     return compute_stickiness(

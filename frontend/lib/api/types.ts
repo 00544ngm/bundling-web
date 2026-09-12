@@ -501,7 +501,7 @@ export interface SearchResponse {
   results: SearchProduct[];
 }
 
-export type ProviderSlug = "openai" | "deepseek" | "custom";
+export type ProviderSlug = "openai" | "deepseek" | "custom" | "claude";
 export type ProviderRole = "primary" | "secondary";
 export type ProviderApiProtocol = "openai" | "anthropic";
 export type ProviderModelTestStatus =
@@ -553,6 +553,8 @@ export interface ProviderModelOption {
   last_used_at?: string | null;
   use_count?: number;
   last_auto_tested_at?: string | null;
+  last_acted_by?: string | null;
+  last_acted_at?: string | null;
   transport_mode?: OpenAITransportMode | null;
   structured_output_mode?: OpenAIStructuredOutputMode | null;
 }

@@ -177,10 +177,10 @@
     "rejected": false,
     "minimum_score": 100,
     "maximum_score": 100,
-    "recommendation": "not_recommended",
+    "recommendation": "observe",
     "stickiness_score": 100,
     "execution_status": "hold",
-    "decision_action": "needs_evidence",
+    "decision_action": "needs_evidence_priority",
     "rejection_codes": []
   },
   {
@@ -273,10 +273,10 @@
     "rejected": false,
     "minimum_score": 93,
     "maximum_score": 93,
-    "recommendation": "not_recommended",
+    "recommendation": "observe",
     "stickiness_score": 93,
     "execution_status": "hold",
-    "decision_action": "needs_evidence",
+    "decision_action": "needs_evidence_priority",
     "rejection_codes": []
   },
   {
