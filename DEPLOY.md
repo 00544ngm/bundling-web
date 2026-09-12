@@ -46,14 +46,14 @@ cd /opt/bundling
 
 ## 4. 配置环境变量（两套配置，务必分开两个文件）
 
-项目有**两套 pydantic 配置**，别混在一个文件里，否则旧 `app.core.config.Settings`（`extra=forbid`）会因不认识的键启动报错：
+项目有**两套 pydantic 配置**，分别读各自的 env_file。混在一起**不会报错**（旧 `Settings` 只挑自己声明的字段、其余忽略），但两套键分属不同用途，混着写极易搞错谁管谁，所以分开放：
 
 **① 根目录 `/opt/bundling/.env`** —— 只放旧版/模型/浏览器引导键（app 旧配置读它）：
 ```bash
 cp .env.example .env
 nano .env
 # 内容即 .env.example：OPENAI/DEEPSEEK/CATTOKEN 的 KEY/MODEL/BASE_URL、HEADLESS、BROWSER_WS_ENDPOINT、CAPTCHA_* 等
-# 注意：绝不要在这里放 DATABASE_URL / REDIS_URL / CORS_ORIGINS / ALLOW_REMOTE_SETTINGS / PROVIDER_* ——会触发 extra_forbidden
+# 注意：DATABASE_URL / REDIS_URL / CORS_ORIGINS / ALLOW_REMOTE_SETTINGS / PROVIDER_* 属于后端配置，放 ② backend/.env
 ```
 
 **② `/opt/bundling/backend/.env`** —— 后端 `BackendSettings` 读它：
@@ -99,6 +99,18 @@ python3.13 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip
 .venv/bin/python -m pip install -r requirements-dev.txt -r backend/requirements.txt
 npm --prefix frontend install
+```
+
+**⚠️ 构建前必须先设前端调后端的地址**（否则前端会去调访问者自己电脑的 localhost:8000，页面全废）。
+`NEXT_PUBLIC_*` 是**编译期内联**进浏览器包的，改完必须重新 build 才生效：
+
+```bash
+# 值 = 浏览器能访问到的后端根地址（不带 /api/v1，代码会自己拼）
+# 走 nginx 反代的场景（推荐，见第 9 节）：
+echo 'NEXT_PUBLIC_API_BASE=http://服务器IP' > /opt/bundling/frontend/.env.production
+# 不走反代、直接暴露 8000 的场景：
+# echo 'NEXT_PUBLIC_API_BASE=http://服务器IP:8000' > /opt/bundling/frontend/.env.production
+
 npm --prefix frontend run build     # 生产构建（不是 next dev）
 ```
 
