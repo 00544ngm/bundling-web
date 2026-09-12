@@ -154,6 +154,15 @@ export default function JobDetailPage() {
     provider: option.provider,
     model: option.model,
   });
+  // 按钮上照实写「实际会拿哪两个模型互评」。这里曾经硬编码成
+  // 「GPT 与 DeepSeek 互评」，可下拉里选的根本不一定是这两家 —— 文案会骗人。
+  const reviewerLabel = (selection: { provider: string; model: string } | null) => {
+    if (!selection) return "未选择";
+    const option = catalog.find(
+      (item) => item.provider === selection.provider && item.model === selection.model
+    );
+    return option ? `${option.provider_display_name} · ${option.model}` : selection.model;
+  };
   let selectedA = isCatalogSelection(reviewerA) ? reviewerA : null;
   let selectedB = isCatalogSelection(reviewerB) ? reviewerB : null;
   if (!selectedA) {
@@ -175,6 +184,10 @@ export default function JobDetailPage() {
       ? ((payload as Record<string, unknown>).results as JobResultPayload[])
       : null;
   const isBatch = !!batchResults && batchResults.length > 0;
+  // 完成态下方 ResultSummary 已经展示同一份主品信息（图 / 标题 / ID），
+  // 顶部这张卡就不再重复渲染，省掉首屏约 180px。排队、执行中、失败时
+  // 下方没有 ResultSummary，顶部这张仍是唯一的主品信息来源，保留。
+  const showProductHeader = !(job.status === "completed" && !isBatch);
 
   // Determine which model result to display
   let activeResult: ModelResult | undefined;
@@ -252,7 +265,7 @@ export default function JobDetailPage() {
         </div>
       )}
 
-      {(productId || productTitle || productTitleZh || productImages?.length) && (
+      {showProductHeader && (productId || productTitle || productTitleZh || productImages?.length) && (
         <section className="grid gap-4 rounded-xl border p-4 sm:grid-cols-[96px_minmax(0,1fr)]">
           <ProductMedia
             src={productImages}
@@ -344,26 +357,6 @@ export default function JobDetailPage() {
           </div>
 
           {/* Cross-review trigger */}
-          {hasDual && !hasCrossReview && (
-            <div className="border border-primary/25 bg-primary/[0.04] p-4 shadow-sm">
-            <div className="mb-3 flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-md bg-primary text-primary-foreground"><ShieldCheck className="h-5 w-5" aria-hidden="true" /></div><div><h2 className="text-sm font-semibold">交叉验证</h2><p className="text-sm text-muted-foreground">比较两个模型的结论与评分差异</p></div></div>
-            <div className="mb-3 grid gap-3 md:grid-cols-2">
-              <label className="space-y-1 text-sm"><span className="font-medium">评审模型 A</span><select aria-label="评审模型 A" value={selectedA ? `${selectedA.provider}:${selectedA.model}` : ""} onChange={(event) => { const [provider, ...model] = event.target.value.split(":"); setReviewerA({ provider, model: model.join(":") }); }} className="h-10 w-full rounded-md border border-input bg-background px-3">{!selectedA && <option value="" disabled>无可用评审模型</option>}{catalog.map((option) => <option key={`${option.provider}:${option.model}`} value={`${option.provider}:${option.model}`}>{option.provider_display_name} · {option.model}</option>)}</select></label>
-              <label className="space-y-1 text-sm"><span className="font-medium">评审模型 B</span><select aria-label="评审模型 B" value={selectedB ? `${selectedB.provider}:${selectedB.model}` : ""} onChange={(event) => { const [provider, ...model] = event.target.value.split(":"); setReviewerB({ provider, model: model.join(":") }); }} className="h-10 w-full rounded-md border border-input bg-background px-3">{!selectedB && <option value="" disabled>需要第二个可用评审模型</option>}{catalog.map((option) => <option key={`${option.provider}:${option.model}`} value={`${option.provider}:${option.model}`}>{option.provider_display_name} · {option.model}</option>)}</select></label>
-            </div>
-            <button
-              type="button"
-               onClick={() => selectedA && selectedB && crossReviewMutation.mutate({ reviewerA: selectedA, reviewerB: selectedB })}
-               disabled={crossReviewMutation.isPending || !selectedA || !selectedB || (selectedA.provider === selectedB.provider && selectedA.model === selectedB.model)}
-              className="flex w-full items-center justify-center rounded-md bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
-            >
-              {crossReviewMutation.isPending
-                ? "正在进行交叉验证..."
-                : "开始交叉验证（交叉验证：GPT 与 DeepSeek 互评）"}
-            </button>
-            </div>
-          )}
-
           <ResultSummary
             grade={activeResult?.grade}
             gradeReason={activeResult?.grade_reason}
@@ -450,6 +443,28 @@ export default function JobDetailPage() {
               rejectedBProducts={taskRejectedBProducts}
               bundlePlans={payload?.bundle_plans}
             />
+          )}
+
+          {/* 交叉验证放在结论之后：它是个「动作」，压在结果上方会让人先看到
+              「要不要做点什么」而不是结论本身。 */}
+          {hasDual && !hasCrossReview && (
+            <div className="border border-primary/25 bg-primary/[0.04] p-4 shadow-sm">
+            <div className="mb-3 flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-md bg-primary text-primary-foreground"><ShieldCheck className="h-5 w-5" aria-hidden="true" /></div><div><h2 className="text-sm font-semibold">交叉验证</h2><p className="text-sm text-muted-foreground">让另一个模型复核上述结论与评分</p></div></div>
+            <div className="mb-3 grid gap-3 md:grid-cols-2">
+              <label className="space-y-1 text-sm"><span className="font-medium">评审模型 A</span><select aria-label="评审模型 A" value={selectedA ? `${selectedA.provider}:${selectedA.model}` : ""} onChange={(event) => { const [provider, ...model] = event.target.value.split(":"); setReviewerA({ provider, model: model.join(":") }); }} className="h-10 w-full rounded-md border border-input bg-background px-3">{!selectedA && <option value="" disabled>无可用评审模型</option>}{catalog.map((option) => <option key={`${option.provider}:${option.model}`} value={`${option.provider}:${option.model}`}>{option.provider_display_name} · {option.model}</option>)}</select></label>
+              <label className="space-y-1 text-sm"><span className="font-medium">评审模型 B</span><select aria-label="评审模型 B" value={selectedB ? `${selectedB.provider}:${selectedB.model}` : ""} onChange={(event) => { const [provider, ...model] = event.target.value.split(":"); setReviewerB({ provider, model: model.join(":") }); }} className="h-10 w-full rounded-md border border-input bg-background px-3">{!selectedB && <option value="" disabled>需要第二个可用评审模型</option>}{catalog.map((option) => <option key={`${option.provider}:${option.model}`} value={`${option.provider}:${option.model}`}>{option.provider_display_name} · {option.model}</option>)}</select></label>
+            </div>
+            <button
+              type="button"
+               onClick={() => selectedA && selectedB && crossReviewMutation.mutate({ reviewerA: selectedA, reviewerB: selectedB })}
+               disabled={crossReviewMutation.isPending || !selectedA || !selectedB || (selectedA.provider === selectedB.provider && selectedA.model === selectedB.model)}
+              className="flex w-full items-center justify-center rounded-md bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
+            >
+              {crossReviewMutation.isPending
+                ? "正在进行交叉验证…"
+                : `开始交叉验证（${reviewerLabel(selectedA)} × ${reviewerLabel(selectedB)}）`}
+            </button>
+            </div>
           )}
         </>
       )}

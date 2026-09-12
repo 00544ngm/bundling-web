@@ -518,8 +518,23 @@ it("shows cross-review text inside the workbench without rewriting characters", 
   expect(screen.getAllByText("交叉验证结果")).toHaveLength(1);
 });
 
-it("makes the cross-review action visually prominent before it is run", async () => {
+it("labels the cross-review action with the reviewers that will actually run", async () => {
+  // 这条用例以前断言按钮写死成「交叉验证：GPT 与 DeepSeek 互评」，而那条文案
+  // 与下拉里实际选中的模型无关 —— 等于把谎话固化成了期望值。现在断言它必须
+  // 映实际会互评的两个模型。
   mockJobId.mockReturnValue("job-cross-action");
+  const option = (model: string) => ({
+    provider: "openai",
+    provider_display_name: "OpenAI",
+    api_protocol: "openai",
+    model,
+    is_default: model === "gpt-5.6-terra",
+    is_selected: true,
+    is_enabled: true,
+    test_status: "verified" as const,
+    tested_at: "2026-07-30T02:00:00Z",
+    test_message: "结构化验证成功",
+  });
   server.use(
     http.get(`${API_BASE}/api/v1/jobs/:jobId`, () =>
       HttpResponse.json({
@@ -540,13 +555,38 @@ it("makes the cross-review action visually prominent before it is run", async ()
           },
         },
       })
+    ),
+    http.get(`${API_BASE}/api/v1/workbench/providers`, () =>
+      HttpResponse.json([
+        {
+          slug: "openai",
+          api_protocol: "openai",
+          display_name: "OpenAI",
+          role: "primary",
+          base_url: "https://api.openai.com/v1",
+          default_model: "gpt-5.6-terra",
+          supported_models: ["gpt-5.6-terra", "gpt-5.6-sol"],
+          model_options: [option("gpt-5.6-terra"), option("gpt-5.6-sol")],
+          is_enabled: true,
+          configured: true,
+          masked_api_key: "••••4F2A",
+          last_test_status: "success",
+          last_tested_at: null,
+          last_test_message: null,
+          updated_at: null,
+        },
+      ])
     )
   );
 
   render(<JobDetailPage />, { wrapper: createWrapper() });
-  const button = await screen.findByRole("button", { name: /交叉验证：GPT 与 DeepSeek 互评/ });
+
+  const button = await screen.findByRole("button", {
+    name: /开始交叉验证（OpenAI · gpt-5\.6-terra × OpenAI · gpt-5\.6-sol）/,
+  });
   expect(button).toHaveClass("bg-primary");
-  expect(screen.getByText("比较两个模型的结论与评分差异")).toBeInTheDocument();
+  expect(button).not.toHaveTextContent(/GPT 与 DeepSeek/);
+  expect(screen.getByText("让另一个模型复核上述结论与评分")).toBeInTheDocument();
 });
 
 it.skip("offers both CatToken protocols for cross-review and hides provider-level failures", async () => {
