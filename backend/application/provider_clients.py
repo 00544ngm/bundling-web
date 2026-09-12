@@ -77,7 +77,7 @@ def classify_provider_error(
     if "not supported by any configured account" in normalized:
         return ProviderErrorClassification(
             "PROVIDER_MODEL_ROUTE_UNAVAILABLE",
-            "中转站当前账号分组没有该模型的可用渠道",
+            "当前账号没有该模型的可用渠道",
             False,
         )
     if status_code == 401 or "authentication" in normalized:
@@ -96,16 +96,23 @@ def classify_provider_error(
         )
     if status_code == 429 or "rate_limit" in normalized:
         return ProviderErrorClassification(
-            "PROVIDER_RATE_LIMITED", "中转站请求过于频繁，请稍后重试", True
+            "PROVIDER_RATE_LIMITED", "上游请求过于频繁，请稍后重试", True
         )
     if status_code == 413:
         return ProviderErrorClassification(
             "PROVIDER_REQUEST_TOO_LARGE", "请求内容超过上游服务限制", False
         )
     if status_code == 400:
+        # 这条分支对 OpenAI 兼容与 Anthropic 两种供应商都会走到，所以消息里
+        # 不能写死任何一种协议的名字 —— 曾经一律显示「服务未接受 Anthropic
+        # Messages API 请求」，把 Kimi 这类 OpenAI 兼容供应商的 400 说成了
+        # Anthropic 的问题，排查时被带偏很久。
+        # 上游给的原话往往最有用（例如 kimi 的 "invalid temperature: only 1 is
+        # allowed for this model"），直接透出来，只在没有时兜底。
+        detail = raw.strip()[:300]
         return ProviderErrorClassification(
             "PROVIDER_PROTOCOL_MISMATCH",
-            "服务未接受 Anthropic Messages API 请求，请检查接口协议",
+            f"上游拒绝了该请求：{detail}" if detail else "上游拒绝了该请求，请检查接口协议与模型参数",
             False,
         )
     if (isinstance(status_code, int) and status_code >= 500) or any(
@@ -113,7 +120,7 @@ def classify_provider_error(
     ):
         return ProviderErrorClassification(
             "PROVIDER_UPSTREAM_UNAVAILABLE",
-            "中转站或其上游模型渠道暂时不可用",
+            "上游服务或其渠道暂时不可用",
             True,
         )
     return ProviderErrorClassification(

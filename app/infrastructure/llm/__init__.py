@@ -27,7 +27,12 @@ _MODELS_NO_TEMPERATURE = _MODELS_USE_COMPLETION_TOKENS | {
     "gpt-5.5-pro",
     "gpt-5.6",
 }
-_MODELS_NO_TEMPERATURE_PREFIX = ("gpt-5.5-", "gpt-5.6-")
+# 前缀项按模型名前缀匹配，与 provider 无关。
+#   gpt-5.5- / gpt-5.6- ：不接受该参数（传了会 400）
+#   kimi-               ：Moonshot 的 k2 系只接受 temperature=1，传 0.3 会 400：
+#                         "invalid temperature: only 1 is allowed for this model"。
+#                         省略该参数即由供应商套用它自己的默认值（就是 1），最稳。
+_MODELS_NO_TEMPERATURE_PREFIX = ("gpt-5.5-", "gpt-5.6-", "kimi-")
 
 _DEFAULT_STRUCTURED_REPORT_TIMEOUT_SECONDS = 120.0
 _SLOW_STRUCTURED_REPORT_TIMEOUT_SECONDS = 600.0

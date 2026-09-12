@@ -195,6 +195,17 @@ class TestTemperatureParam:
         assert _temperature_param("o1", 0.3) == {}
         assert _temperature_param("o3", 1.0) == {}
 
+    def test_kimi_models_omit_temperature(self):
+        """Moonshot 的 k2 系只接受 temperature=1。
+
+        我们发 0.3 会被上游 400 拒绝（实测原文："invalid temperature: only 1
+        is allowed for this model"），而省略该参数时由供应商套用自己的默认值，
+        就是唯一允许的那个 1。
+        """
+        assert _temperature_param("kimi-k2.6", 0.3) == {}
+        assert _temperature_param("kimi-k2.7-code", 0.3) == {}
+        assert _temperature_param("kimi-k2.6", None) == {}
+
     def test_unknown_model_includes_temperature(self):
         assert _temperature_param("unknown", 0.5) == {"temperature": 0.5}
 
