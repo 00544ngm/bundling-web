@@ -72,10 +72,12 @@ it("opens mobile navigation when menu button is clicked", async () => {
   expect(screen.getByRole("dialog")).toBeInTheDocument();
 });
 
-it("renders stable desktop API settings navigation", () => {
+it("keeps the desktop sidebar stable and does not surface API settings", () => {
   renderShell();
 
-  expect(screen.getAllByRole("link", { name: "API 设置" }).length).toBeGreaterThanOrEqual(1);
+  // 「API 设置」入口是刻意从导航里隐藏的（页面与 /settings/api 路由都还在，
+  // 直链仍可访问）。这条断言守住这个决定，免得被无意中加回来。
+  expect(screen.queryByRole("link", { name: "API 设置" })).not.toBeInTheDocument();
   expect(screen.getByTestId("desktop-sidebar")).toHaveClass("w-56");
 });
 

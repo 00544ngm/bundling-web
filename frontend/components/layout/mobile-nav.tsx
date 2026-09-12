@@ -6,7 +6,6 @@ import {
   ChevronRight,
   FileText,
   History,
-  KeyRound,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -24,7 +23,8 @@ const baseNavItems = [
   { href: "/results", label: "结果展示", icon: FileText },
 ];
 
-const apiSettingsItem = { href: "/settings/api", label: "API 设置", icon: KeyRound };
+// 「API 设置」入口已按操作者要求从导航隐藏（页面仍可用直链访问），
+// 与桌面侧边栏保持一致。
 
 const itemClass =
   "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-navigation-foreground/70 transition-colors hover:bg-white/10 hover:text-navigation-foreground";
@@ -114,15 +114,6 @@ export default function MobileNav() {
                       ))}
                     </div>
                   )}
-
-                  <Link
-                    href={apiSettingsItem.href}
-                    className={itemClass}
-                    onClick={() => setOpen(false)}
-                  >
-                    <apiSettingsItem.icon className="h-4 w-4" />
-                    <span>{apiSettingsItem.label}</span>
-                  </Link>
                 </>
               )}
             </nav>

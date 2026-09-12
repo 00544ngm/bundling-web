@@ -6,7 +6,6 @@ import {
   ChevronRight,
   FileText,
   History,
-  KeyRound,
   LayoutDashboard,
   LogOut,
   UsersRound,
@@ -22,7 +21,8 @@ const baseNavItems = [
   { href: "/history", label: "历史记录", icon: History },
 ];
 
-const apiSettingsItem = { href: "/settings/api", label: "API 设置", icon: KeyRound };
+// 「API 设置」（全局 provider 配置）的侧边栏入口已按操作者要求隐藏。
+// 页面与路由都保留，直接输 /settings/api 仍可访问 —— 只是不在导航里露出。
 
 const itemClass = (active: boolean) =>
   `flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
@@ -88,14 +88,6 @@ export default function Sidebar() {
                 ))}
               </div>
             )}
-
-            <Link
-              href={apiSettingsItem.href}
-              className={itemClass(pathname === apiSettingsItem.href)}
-            >
-              <apiSettingsItem.icon className="h-4 w-4 shrink-0" />
-              <span className="overflow-hidden whitespace-nowrap">{apiSettingsItem.label}</span>
-            </Link>
           </>
         )}
       </nav>
