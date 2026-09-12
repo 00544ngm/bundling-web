@@ -46,14 +46,14 @@ cd /opt/bundling
 
 ## 4. 配置环境变量（两套配置，务必分开两个文件）
 
-项目有**两套 pydantic 配置**，分别读各自的 env_file。混在一起**不会报错**（旧 `Settings` 只挑自己声明的字段、其余忽略），但两套键分属不同用途，混着写极易搞错谁管谁，所以分开放：
+项目有**两套 pydantic 配置**，别混在一个文件里 —— 旧 `app.core.config.Settings` 的 `model_config` 是 `extra=forbid`（pydantic-settings 的默认值），根 `.env` 里只要出现一个它没声明的键，应用启动就会直接报 `extra_forbidden` 起不来：
 
 **① 根目录 `/opt/bundling/.env`** —— 只放旧版/模型/浏览器引导键（app 旧配置读它）：
 ```bash
 cp .env.example .env
 nano .env
 # 内容即 .env.example：OPENAI/DEEPSEEK/CATTOKEN 的 KEY/MODEL/BASE_URL、HEADLESS、BROWSER_WS_ENDPOINT、CAPTCHA_* 等
-# 注意：DATABASE_URL / REDIS_URL / CORS_ORIGINS / ALLOW_REMOTE_SETTINGS / PROVIDER_* 属于后端配置，放 ② backend/.env
+# 注意：绝不要在这里放 DATABASE_URL / REDIS_URL / CORS_ORIGINS / ALLOW_REMOTE_SETTINGS / AUTH_* / PROVIDER_* ——会触发 extra_forbidden 启动失败
 ```
 
 **② `/opt/bundling/backend/.env`** —— 后端 `BackendSettings` 读它：
