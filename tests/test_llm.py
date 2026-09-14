@@ -11,6 +11,7 @@ from app.core.exceptions import LLMError
 from app.infrastructure import llm as llm_module
 from app.infrastructure.llm import (
     OpenAILLMClient,
+    _reasoning_params,
     _structured_output_max_tokens,
     _temperature_param,
     _token_param,
@@ -118,6 +119,13 @@ async def test_openai_compatible_invalid_json_exposes_stable_error_metadata():
         ("gpt-5.6-sol", 600.0),
         ("gpt-5.4", 120.0),
         ("gpt-4o", 120.0),
+        # 智谱 / Moonshot：真实任务实测在 run_hypothesis 阶段双双 MODEL_TIMEOUT
+        # （glm-5.3 146.6s、kimi-k2.6 141.6s），都撞在 120s 默认预算上。
+        ("glm-5.3", 600.0),
+        ("glm-5.3-flash", 600.0),
+        ("glm-4.6", 600.0),
+        ("kimi-k2.6", 600.0),
+        ("kimi-k3", 600.0),
     ],
 )
 def test_structured_report_timeout_is_model_specific(model, expected):
@@ -131,6 +139,19 @@ def test_new_gpt_models_get_larger_structured_output_budget(model):
 
 def test_older_model_keeps_configured_structured_output_budget():
     assert _structured_output_max_tokens("gpt-5.4", 16384) == 16384
+
+
+@pytest.mark.parametrize(
+    "model", ["glm-5.3", "glm-5.3-flash", "kimi-k2.6", "kimi-k3", "deepseek-v4-pro"]
+)
+def test_reasoning_models_get_the_reasoning_output_budget(model):
+    """推理模型把输出预算烧在隐藏思维链上，需要远高于普通档的上限。
+
+    实测 glm-5.3 与 kimi-k2.6 在 16384 的普通档下跑满约 470 秒后返回**空内容**
+    （"OpenAI-compatible response shape invalid: response text is empty"），
+    与当年 deepseek-v4 的现象同源。
+    """
+    assert _structured_output_max_tokens(model, 16384) == 65536
 
 
 def test_openai_client_bounds_each_request_and_disables_hidden_sdk_retries(
@@ -447,3 +468,78 @@ async def test_structured_chat_exposes_task_timeout_without_duplicate_retry(monk
     assert exc_info.value.timeout_seconds == 600
     create.assert_awaited_once()
     assert create.await_args.kwargs["timeout"] == 600.0
+
+
+class TestReasoningParams:
+    """推理强度控制。
+
+    智谱 GLM 与 Moonshot Kimi 的旗舰模型默认重推理，会把输出预算烧在思维链上。
+    实测 glm-5.3 / kimi-k2.6 在未加控制时跑满约 470 秒后正文一个字都不剩
+    （"response text is empty"）。
+    """
+
+    def test_adjustable_models_get_low_effort(self):
+        # glm-5.3 系与 kimi-k3 思考关不掉，只能用 reasoning_effort 调深浅（默认 max）。
+        assert _reasoning_params("glm-5.3") == {"reasoning_effort": "low"}
+        assert _reasoning_params("glm-5.3-flash") == {"reasoning_effort": "low"}
+        assert _reasoning_params("kimi-k3") == {"reasoning_effort": "low"}
+
+    def test_disableable_models_turn_thinking_off(self):
+        for model in ("kimi-k2.6", "kimi-k2.5", "glm-5.2", "glm-5", "glm-5.1", "glm-4.6"):
+            assert _reasoning_params(model) == {
+                "extra_body": {"thinking": {"type": "disabled"}}
+            }, model
+
+    def test_forced_thinking_models_are_left_untouched(self):
+        """glm-4.7 与 kimi-k2.7-code 关不掉思考，传 disabled 会被上游拒绝。"""
+        assert _reasoning_params("glm-4.7") == {}
+        assert _reasoning_params("kimi-k2.7-code") == {}
+
+    def test_never_sends_both_controls_at_once(self):
+        """上游会 400：cannot specify both 'thinking' and 'reasoning_effort'。"""
+        for model in ("glm-5.3", "glm-5.3-flash", "kimi-k3", "kimi-k2.6", "glm-5"):
+            params = _reasoning_params(model)
+            assert not ("reasoning_effort" in params and "extra_body" in params), model
+
+    def test_unrelated_models_keep_original_behaviour(self):
+        for model in ("gpt-5.6-terra", "gpt-4o", "deepseek-v4-pro", "deepseek-flash"):
+            assert _reasoning_params(model) == {}, model
+
+
+@pytest.mark.asyncio
+async def test_reasoning_params_reach_the_wire():
+    """抓真实的 HTTP body，确认推理控制参数确实发出去了（不是只算了个字典）。"""
+    import json as _json
+
+    import httpx
+    from openai import AsyncOpenAI
+
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = _json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": '{"ok": true}'}}]},
+        )
+
+    client = OpenAILLMClient(model="kimi-k2.6", api_key="x", base_url="https://api.moonshot.cn/v1")
+    client._client = AsyncOpenAI(
+        api_key="x",
+        base_url="https://api.moonshot.cn/v1",
+        max_retries=0,
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+
+    await client.chat_structured(
+        messages=[{"role": "user", "content": "return JSON"}],
+        output_schema={"type": "object"},
+        max_tokens=64,
+        max_retries=1,
+    )
+
+    body = captured["body"]
+    # 关掉思考的模型走 extra_body
+    assert body["thinking"] == {"type": "disabled"}
+    # 且绝不能同时带另一个（上游会 400）
+    assert "reasoning_effort" not in body

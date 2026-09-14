@@ -39,11 +39,22 @@ _SLOW_STRUCTURED_REPORT_TIMEOUT_SECONDS = 600.0
 # 慢速结构化报告模型家族：前缀匹配（含 "-" 子型号）。gpt-5.5 与 gpt-5.6
 # 同样产出大型 JSON（见 _LARGE_STRUCTURED_OUTPUT_MODELS），单次完整报告需要
 # 远高于默认 120s 的预算，否则会在真实长请求上提前超时。
-_SLOW_STRUCTURED_REPORT_MODELS = ("gpt-5.5", "gpt-5.6")
+#
+# glm- / kimi- 同理：智谱与 Moonshot 的旗舰模型单次完整报告同样超过 120s。
+# 实测（2026-09-13）真实任务在 run_hypothesis 阶段双双 MODEL_TIMEOUT：
+# glm-5.3 用了 146.6s / 158.9s（重试两次），kimi-k2.6 用了 141.6s / 146.4s ——
+# 都撞在 120s 的默认预算上。它们以前没跑过，所以一直没暴露。
+_SLOW_STRUCTURED_REPORT_MODELS = ("gpt-5.5", "gpt-5.6", "glm", "kimi")
 _LARGE_STRUCTURED_OUTPUT_MODELS = ("gpt-5.5", "gpt-5.6")
 _LARGE_STRUCTURED_OUTPUT_TOKENS = 32768
-_DEEPSEEK_LARGE_STRUCTURED_OUTPUT_MODELS = ("deepseek-v4",)
-_DEEPSEEK_STRUCTURED_OUTPUT_TOKENS = 65536
+# 推理模型档：输出预算会被**隐藏思维链**吃掉一大块，需要比普通档(16384)高得多的
+# 上限，否则正文可能一个字都不剩。原本只有 deepseek-v4 享受这一档。
+# 实测（2026-09-13）glm-5.3 与 kimi-k2.6 在普通档下跑满约 470 秒后返回
+# **空内容**（"OpenAI-compatible response shape invalid: response text is empty"）
+# —— 与当年 deepseek 的现象同源。两家都接受更大上限（实测到 131072 均 200），
+# 故并入本档。
+_REASONING_STRUCTURED_OUTPUT_MODELS = ("deepseek-v4", "glm", "kimi")
+_REASONING_STRUCTURED_OUTPUT_TOKENS = 65536
 
 
 def report_timeout_seconds(model: str, protocol: str = "openai") -> float:
@@ -70,9 +81,9 @@ def _structured_output_max_tokens(model: str, configured: int) -> int:
     normalized = model.strip().lower()
     if any(
         normalized == prefix or normalized.startswith(f"{prefix}-")
-        for prefix in _DEEPSEEK_LARGE_STRUCTURED_OUTPUT_MODELS
+        for prefix in _REASONING_STRUCTURED_OUTPUT_MODELS
     ):
-        return max(configured, _DEEPSEEK_STRUCTURED_OUTPUT_TOKENS)
+        return max(configured, _REASONING_STRUCTURED_OUTPUT_TOKENS)
     if any(
         normalized == prefix or normalized.startswith(f"{prefix}-")
         for prefix in _LARGE_STRUCTURED_OUTPUT_MODELS
@@ -101,6 +112,48 @@ def _temperature_param(model: str, default: float | None) -> dict[str, float]:
         return {}
     if default is not None:
         return {"temperature": default}
+    return {}
+
+
+# --- 推理强度控制 -----------------------------------------------------------
+# 智谱 GLM 与 Moonshot Kimi 的旗舰模型默认是「重推理」：思维链会吃掉大量输出
+# 预算。实测（2026-09-13）glm-5.3 与 kimi-k2.6 在 16384 预算下跑满约 470 秒后
+# **正文一个字都不剩**（"response text is empty"）—— 官方文档对此有明确说明：
+# 「否则可能把全部 token 花在 reasoning_content 上导致 content 为空」。
+#
+# 开关按模型分成两套，**不能同时发**（上游会 400：
+# "cannot specify both 'thinking' and 'reasoning_effort'"）：
+#   - k3 / glm-5.3 系：思考关不掉，只能用 reasoning_effort 调深浅（默认 max）
+#   - k2.6 及更早 / glm-5.2 及更早：可以用 thinking.type=disabled 彻底关掉
+# 非标准参数走 OpenAI SDK 的 extra_body 透传。
+_THINKING_UNSUPPORTED_EFFORT_MODELS = ("kimi-k3", "glm-5.3")
+_THINKING_DISABLED_MODELS = (
+    "kimi-k2.6",
+    "kimi-k2.5",
+    "glm-5.2",
+    "glm-5",
+    "glm-4.6",
+    "glm-4.5",
+)
+
+
+def _reasoning_params(model: str) -> dict[str, Any]:
+    """按模型返回推理强度控制参数；未列出的模型返回空（维持原行为）。
+
+    注意两家都**不允许**同时传 thinking 与 reasoning_effort，所以这里只返回其一。
+    """
+    normalized = model.strip().lower()
+
+    def matches(prefix: str) -> bool:
+        # 型号分隔符有 "-" 也有 "."（glm-5 与 glm-5.2 / glm-5.3），两种都要认。
+        return normalized == prefix or normalized.startswith(
+            (f"{prefix}-", f"{prefix}.")
+        )
+
+    if any(matches(prefix) for prefix in _THINKING_UNSUPPORTED_EFFORT_MODELS):
+        return {"reasoning_effort": "low"}
+    if any(matches(prefix) for prefix in _THINKING_DISABLED_MODELS):
+        return {"extra_body": {"thinking": {"type": "disabled"}}}
     return {}
 
 
@@ -218,7 +271,8 @@ class OpenAILLMClient(LLMClientInterface):
                     return response.output_text or ""
                 resp = await self._client.chat.completions.create(
                     model=model, messages=messages,
-                    **temp_param, **token_param, **kwargs)
+                    **temp_param, **token_param,
+                    **_reasoning_params(model), **kwargs)
                 return resp.choices[0].message.content or ""
             except Exception as e:  # noqa: BLE001 - SDK adapters expose varied errors
                 last_error = (
@@ -317,6 +371,7 @@ class OpenAILLMClient(LLMClientInterface):
                     "messages": request_messages,
                     **temp_param,
                     **token_param,
+                    **_reasoning_params(model),
                     "timeout": request_timeout,
                     **kwargs,
                 }
